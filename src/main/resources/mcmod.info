@@ -1,0 +1,21 @@
+{
+	"modListVersion": 2,
+	"modList": [{
+		"modid": "${modId}",
+		"name": "${modName}",
+		"description": "Imaginary Space Meteorite Excavation (虚数陨星采矿场), an addon for Minecraft 1.7.10 and GTNH 2.9.0.",
+		"version": "${modVersion}",
+		"mcversion": "${minecraftVersion}",
+		"url": "",
+		"updateUrl": "",
+		"authorList": [],
+		"credits": "",
+		"logoFile": "",
+		"screenshots": [],
+		"parent": "",
+		"requiredMods": [],
+		"dependencies": [],
+		"dependants": [],
+		"useDependencyInformation": false
+	}]
+}
