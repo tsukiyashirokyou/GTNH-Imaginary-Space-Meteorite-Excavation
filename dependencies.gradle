@@ -34,5 +34,25 @@
  * For more details, see https://docs.gradle.org/8.0.1/userguide/java_library_plugin.html#sec:java_library_configurations_graph
  */
 dependencies {
-    //runtimeOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.7.69-GTNH:dev")
+    // GTNH 2.9.0 stable API versions; do not inherit older upstream development pins.
+    api("com.github.GTNewHorizons:GT5-Unofficial:5.09.54.265:dev") {
+        version { strictly("5.09.54.265") }
+    }
+    api("com.github.GTNewHorizons:StructureLib:1.4.47:dev") {
+        version { strictly("1.4.47") }
+    }
+    api("com.github.GTNewHorizons:GTNHLib:0.11.54:dev") {
+        version { strictly("0.11.54") }
+    }
+    api("com.github.GTNewHorizons:ModularUI2:2.3.94-1.7.10:dev") {
+        version { strictly("2.3.94-1.7.10") }
+    }
+    implementation("com.github.GTNewHorizons:Applied-Energistics-2-Unofficial:rv3-beta-1095-GTNH:dev") {
+        version { strictly("rv3-beta-1095-GTNH") }
+    }
+    implementation("com.github.GTNewHorizons:BloodMagic:1.9.16:dev") {
+        version { strictly("1.9.16") }
+    }
+    // Test library only; not a Mod or a runtime dependency.
+    testImplementation("junit:junit:4.13.2")
 }

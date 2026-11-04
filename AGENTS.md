@@ -1,298 +1,167 @@
 # AGENTS.md — Imaginary Space Meteorite Excavation
 
-## 1. Project Identity
+更新日期：2026-11-04。阶段 2 基础机器的开发端实现、构建和模块测试已完成；用户游戏验收待执行，尚未开始阶段 3。
 
-- Project: Imaginary Space Meteorite Excavation
-- Chinese name: 虚数陨星采矿场
-- Mod ID: `imaginaryspacemeteoriteexcavation`
-- Group ID: `com.kyou.imaginaryspacemeteoriteexcavation`
-- Java package: `com.kyou.imaginaryspacemeteoriteexcavation`
-- Minecraft: 1.7.10
-- Target: GTNH 2.9.0 stable release
-- Java compatibility: Java 8
+## 1. 项目身份与文档优先级
 
-This is an independent GTNH addon. Do not modify GTNH core code.
+- 项目：Imaginary Space Meteorite Excavation
+- 中文名：虚数陨星采矿场
+- Mod ID：`imaginaryspacemeteoriteexcavation`
+- Group ID / Java 包：`com.kyou.imaginaryspacemeteoriteexcavation`
+- Minecraft：1.7.10
+- 目标整合包：GTNH 2.9.0 正式稳定版
+- 兼容性：Java 8 字节码及 API；这不表示可以更改现有 JDK Toolchain。
+- 本项目为独立附属 Mod，不修改 GTNH 核心源码。
 
-## 2. Core Development Principles
+执行任务时采用以下顺序：
 
-1. Prefer reusing existing GTNH, GT5U, Blood Magic, AE2 and StructureLib implementations.
-2. Investigate the actual target-version source before using an API or implementing a mechanism.
-3. Do not assume APIs or behaviors from other GTNH versions.
-4. Do not invent classes, methods, registry names or interfaces.
-5. Preserve existing project conventions unless a change is necessary and approved.
-6. Keep functionality separated into independently testable components.
-7. Prioritize correctness, item conservation, resource consistency and server TPS performance.
-8. Do not implement features outside the currently authorized development stage.
-9. Keep technical findings, implementation decisions, test results and unresolved issues documented throughout development.
+1. 用户最新消息及明确答复。
+2. `docs/设计反馈.txt`，以及用户在 2026-11-04 明确选择的“整批累计期望后向下取整”。
+3. 本文件、`docs/TECHNICAL_DECISIONS.md`、`docs/STAGE1_FINAL_DESIGN.md`、`docs/DEVELOPMENT_PLAN.md`中的当前基线。
+4. 旧设计草案、初始调查中的方案比较和归档，仅作历史或源码证据。
+
+原始反馈与草案由用户维护，不自行改写。若发现派生文档冲突，按最新反馈同步，不把已批准事项重新列为待确认。旧专题报告的源码事实仍可引用，但其早期建议不能覆盖当前决定。
+
+## 2. 开发原则
 
-## 3. Mixin and Invasive Technology Policy
+- 优先复用目标正式版 GT5U、Blood Magic、AE2、StructureLib、GTNHLib 和 MUI2 的公开实现。
+- 使用 API 前核查目标版本源码，不套用其他版本、主分支或 RC2 的行为，不编造注册名、类和方法。
+- 保持模块可独立验证，明确区分用户决定、源码事实、实施细节与未执行测试。
+- 正常运行防止重复产出、重复扣费和非预期丢物；过滤销毁、处理中跳电损失和崩溃损失按第 3 节的用户规则处理。
+- TPS 是核心目标。数学和配方索引按配置建立缓存，不按 Tick 或方块逐个反复求解。
+- 只实施当前授权阶段。阶段 2 已接入必要 API 并实现基础物品、结构和三槽 GUI，不运行陨星配方；后续以用户最新授权为准，不把旧会话的范围限定当作永久禁令。
+- 每个阶段先列范围、前置、任务、验收与风险；结束后提交报告并停止，不自动进入下一阶段。
 
-**Avoid Mixin and invasive modifications wherever possible.**
+## 3. 已确定功能基线
 
-Preferred implementation order:
+### 3.1 理想环境下的标准陨星期望
 
-1. Public APIs provided by GTNH and its dependencies.
-2. Existing GTNH extension points and interfaces.
-3. Inheritance and composition.
-4. Forge events and callbacks.
-5. Existing machine processing and transaction interfaces.
-6. Other non-invasive compatibility mechanisms.
+采用标准化理想环境：有效世界高度内、区域全为空气、经过审核的方块都能放置成功，生成后没有邻接变化。
+
+- 仅支持标准坠星配方，不支持原生仪式试剂及其半径、填充或概率修正。
+- 不创建真实或模拟 World，不运行原随机放置，不生成或破坏世界陨星，不依赖坐标、种子和随机序列。
+- 总方块数采用原版球体边界内的精确整数格点数，不用连续球体积或包围立方体体积代替。
+- 在已核实的理想条件下，使用“总方块数乘以最终方块概率”计算数学期望。
+- 最终概率必须来自源码：保留矿物与填充的互斥分支、各自归一化权重、float 概率规则，以及同一方块的多条贡献。
+- 不能未经批准将精确来源概率替换为字面近似百分比。无效或无法表示的组件必须报告并明确处理，不静默伪造产物。
 
-Avoid introducing:
+### 3.2 直接输出方块物品与整批取整
 
-- Mixin
-- Coremod modifications
-- ASM bytecode transformations
-- Runtime bytecode patching
-- Access Transformers
-- Reflection-based access to private internals
+- 一份生成矿石方块对应一份该矿石方块物品；填充块同样直接输出其方块物品。
+- 不应用常规采收掉落、时运、粉碎机转换、IV 采矿场随机倍产或其他二次加工。
+- 保留正确的 Item、metadata 和必要 NBT；无法正确表示的方块应列为适配问题。
+- 批量 B 次时，先累加整批同一物品身份的精确期望，再分别向下取整：
+  `Q_i(B) = floor(B * E_i)`。
+- 例：单次期望 1.6 个，批量 3 次输出 4 个。
+- 不采用 `B * floor(E_i)`，不保存跨批次小数余量，不补发被舍弃的小数。
+
+### 3.3 最终物品过滤与钻井液
 
-If a required feature appears impossible without invasive modification:
-
-1. Investigate and document the limitation.
-2. Explain why public APIs and existing extension points are insufficient.
-3. Present non-invasive alternatives and their limitations.
-4. Identify affected classes, methods and compatibility risks.
-5. Submit a technical proposal for approval.
-
-**Do not introduce or implement Mixin, Coremod, ASM, Access Transformers or bytecode modifications without explicit user approval.**
-
-## 4. Dependency and Build Configuration
-
-- Do not modify Gradle versions, JDK configuration or existing build infrastructure without authorization.
-- Do not add new Mod dependencies without explaining their necessity and obtaining approval.
-- Do not introduce TST as a dependency without explicit approval.
-- Do not change GTNH, GT5U, AE2 or Blood Magic versions independently.
-- Maintain Java 8 bytecode and API compatibility.
-- Preserve existing build conventions.
-
-## 5. Fixed Functional Requirements
-
-### 5.1 Meteorite Simulation Uses Mathematical Expectation
-
-The machine must not reproduce an individual randomized meteorite generation result.
-
-Instead, calculate the theoretical expected quantity of every generated block/item from the actual probability model and generation rules in GTNH 2.9.0.
-
-Requirements:
-
-- Investigate the original generation algorithm and derive its probability model from source code.
-- Calculate expected quantities analytically/deterministically.
-- Do not run the original random placement process in the machine.
-- Do not generate or destroy meteorite world blocks.
-- Do not require a matching random seed, world coordinate or random sequence to produce the machine's output.
-- Do not replace source-derived probabilities with guessed or approximate probabilities without explicit approval.
-- Account for conditional probabilities, mutually exclusive placements, sequential generation, boundaries, empty positions and any other rules that affect expected quantities.
-- Include filling blocks and all other generated blocks in the expected-yield model, not only ores.
-- Trace the conversion from generated blocks to actual item drops. The machine output must represent the correct item form and quantity, not merely count placed Block instances.
-
-If expected quantities are fractional but machine outputs require integer ItemStack counts, do not choose a rounding policy silently. Analyze the possible policies, their bias and their effect on long-term output, then document the recommendation for user approval unless the source-derived model naturally produces integers.
-
-### 5.2 Machine GUI Slots
-
-The machine has exactly three dedicated GUI item slots:
-
-1. Bound Blood Orb: required; identifies the player Soul Network used for LP checks and deduction.
-2. Filtering Book: optional; when absent, no output filtering is applied.
-3. AE2 spatial tower blocks: required; total quantity is used for the recipe radius check.
-
-There is **no fourth dedicated GUI slot**. Do not add one or treat its purpose as unresolved.
-
-The spatial tower slot must support quantities greater than one ordinary stack. Investigate the target-version inventory/container implementation and implement a safe quantity limit and transfer behavior.
-
-The GUI must display relevant machine state, including structure status, operating state, LP status, spatial tower count and supported radius, missing requirements, output-space failures, current recipe, progress and output information.
-
-### 5.3 Spatial Tower Radius Check
-
-For each identified meteorite ritual recipe:
-
-- `r` is the recipe's meteorite radius.
-- `n` is the total number of AE2 spatial tower blocks in the machine's spatial tower slot.
-
-Execution condition:
-
-`r <= n / 3 - 1`
-
-For non-negative integer `r` and `n`, use the equivalent comparison:
-
-`3L * (r + 1L) <= n`
-
-Perform this check immediately after identifying the recipe and before LP checks or resource commitment.
-
-If the condition fails:
-
-- Do not execute the recipe.
-- Do not deduct LP.
-- Do not consume drilling fluid.
-- Do not consume recipe inputs.
-- Display a clear insufficient spatial tower warning.
-
-Do not assume the exact AE2 registry name until confirmed from the target-version source.
-
-### 5.4 Blood Magic and LP
-
-- The machine requires a bound Blood Orb.
-- LP is obtained from the Soul Network of the bound player.
-- Ammonk's Blood Orb follows the project rule: default LP cost is zero, without LP checking or deduction.
-- Verify actual item identification and Soul Network behavior from the installed Blood Magic version.
-- Do not infer APIs or special behavior from unrelated Blood Magic versions.
-
-### 5.5 Drilling Fluid
-
-- Base consumption: 1 L per generated/output block, subject to confirmation of how expected block counts are converted to integer output quantities.
-- Insufficient drilling fluid must prevent recipe execution.
-- The relationship between filtering, expected output quantities, integer conversion and drilling-fluid calculation must be explicitly analyzed and documented before implementation.
-
-### 5.6 Filtering Book
-
-- Optional machine item.
-- Absence means no output filtering.
-- Each ritual has independent configuration.
-- Default mode is whitelist.
-- Default book includes all supported rituals and their generated blocks.
-- Do not merge configurations between different rituals.
-- Use stable ritual identifiers as configuration keys rather than localized display names.
-- Configuration copy must preserve the source book and create a correctly copied destination book.
-- Configuration clearing must return a default/unconfigured book according to the approved recipe behavior.
-
-### 5.7 Output Safety
-
-- Ordinary output hatches must be checked before recipe commitment.
-- ME output must be evaluated against actual AE2 storage interfaces.
-- Prevent partial output, item loss and duplication.
-- LP, drilling fluid, input consumption and output commitment must have a consistent execution strategy.
-- Do not assume output operations are atomic without verifying their implementation.
-- If all-or-nothing output cannot be guaranteed with native APIs, document the limitation and alternatives before choosing an invasive solution.
-
-## 6. Unresolved Design Decisions
-
-Do not independently decide the following items without source investigation and user confirmation:
-
-- Whether multiple A energy hatches are supported.
-- Exact spatial tower item identity and its AE2 implementation.
-- Whether the original expected-yield probability model varies by world, dimension, coordinates or other context.
-- How fractional expected quantities are converted into integer output quantities.
-- Whether drilling-fluid consumption is based on pre-filter or post-filter output quantities.
-- Whether filling blocks are filtered and counted identically to ores.
-- Whether custom Long ME output logic is necessary.
-- Whether any invasive modification is unavoidable.
-
-The fourth GUI slot is not an unresolved decision; it has been explicitly removed from the design.
-
-Record findings and recommendations in design documents.
-
-## 7. Development Stages
-
-Development must proceed in the following stages. Do not implement the entire Mod in one task.
-
-1. **Source investigation and technical design**
-   - Verify exact GTNH 2.9.0 source/dependency versions.
-   - Investigate meteorite ritual registration and the mathematical expected-yield model.
-   - Investigate Blood Magic LP and orb behavior.
-   - Investigate AE2 spatial tower identification and large-count slot behavior.
-   - Investigate IV Mining Facility structure, energy, processing, overclocking and batching.
-   - Investigate ordinary and ME output APIs and transaction safety.
-   - Investigate filtering book, NBT, GUI and StructureLib patterns.
-   - Produce an integrated technical design and risk register.
-   - No large-scale feature implementation in this stage.
-
-2. **Basic items and multiblock machine**
-   - Register the controller and required items.
-   - Implement the multiblock based on the verified IV Mining Facility implementation.
-   - Implement exactly three dedicated GUI slots.
-   - Implement basic GUI status and structure validation.
-   - Verify machine formation and inventory behavior.
-
-3. **Meteorite expected-yield calculation engine**
-   - Resolve ritual recipes and their parameters.
-   - Apply the spatial tower radius check.
-   - Implement deterministic mathematical expected-yield calculations.
-   - Handle block-to-item conversion.
-   - Implement LP, drilling-fluid, processing-time, energy and batch calculations as authorized by the technical design.
-   - Test the calculation engine independently of world modification and output commitment.
-
-4. **Filtering Book**
-   - Implement ritual pages, whitelist/blacklist modes and independent NBT configuration.
-   - Implement default configuration, per-page reset, configuration copy and clearing.
-   - Test persistence and isolation between rituals.
-
-5. **Output system**
-   - Implement ordinary item/fluid output handling.
-   - Implement ME output using verified AE2 interfaces.
-   - Implement output-space preflight and safe commitment.
-   - Evaluate Long output support only where native APIs are insufficient.
-
-6. **Full machine integration and performance**
-   - Integrate the calculation engine, LP, drilling fluid, filtering and output.
-   - Implement scheduling, caching and controlled output processing.
-   - Verify pause, stop, chunk unload, save/load and recovery behavior.
-   - Evaluate multi-machine TPS impact.
-
-7. **In-game acceptance**
-   - Test against GTNH 2.9.0 stable.
-   - Test multiple ritual radii, tower quantities, LP balances, orb types, drilling-fluid amounts, filtering settings, output-full cases, batching and save/load.
-   - Compare expected-yield calculations against mathematically derived reference cases.
-   - Record bugs, fixes and final acceptance results.
-
-For each stage, define scope, implementation tasks, acceptance criteria and known risks before coding.
-
-## 8. Development Process Documentation
-
-Maintaining development process documentation is mandatory.
-
-Create and maintain at least:
-
-- `docs/DEVELOPMENT_PLAN.md`: current staged plan, scope, dependencies and acceptance criteria.
-- `docs/DEVELOPMENT_LOG.md`: chronological development history.
-- `docs/TECHNICAL_DECISIONS.md`: important decisions, rationale, alternatives and approval status.
-- Stage-specific investigation, design, implementation and test reports under `docs/`.
-
-Update `docs/DEVELOPMENT_LOG.md` at the end of every meaningful work session and every Codex task. Do not wait until the entire Mod is finished.
-
-Each log entry should include:
-
-- Date and stage.
-- Objective and authorized scope.
-- Files/classes investigated or modified.
-- Key findings and decisions.
-- Commands/builds/tests executed and their results.
-- Problems, limitations and unresolved questions.
-- Next recommended action.
-
-Do not claim tests were run if they were not run. Distinguish completed work from proposed work. Keep reports consistent with the actual repository state.
-
-## 9. Source Investigation and Evidence
-
-For important technical conclusions, provide:
-
-- Actual source file path.
-- Class and method names.
-- Relevant code and line numbers where available.
-- Exact dependency/runtime version.
-- Evidence distinguishing confirmed facts from inferences.
-
-If the required source is unavailable, report the missing source instead of guessing.
-
-Do not use another GTNH version as a substitute for the target version without clearly documenting the mismatch and obtaining approval for any resulting design assumption.
-
-## 10. Performance Requirements
-
-TPS optimization is a core requirement.
-
-- Avoid expensive repeated recipe searches.
-- Avoid unnecessary per-Tick world or inventory scans.
-- Cache deterministic expected-yield results where appropriate.
-- Avoid unnecessary object allocation and repeated conversions.
-- Process large outputs in controlled batches.
-- Ensure correct state handling during pause, stop, chunk unload and world save/load.
-- Optimize for multiple machines operating simultaneously, not just one machine.
-
-## 11. User Approval and Scope Control
-
-The user is the final authority on functional requirements and architecture decisions.
-
-Do not silently change requirements, introduce invasive techniques, add dependencies or expand the authorized development scope.
-
-When a decision materially affects compatibility, performance, resource consumption, expected output quantities or implementation architecture, explain the alternatives and wait for approval.
-
-At the end of each stage, stop and provide the relevant reports, build/test results and unresolved issues. Do not automatically proceed to the next stage.
+- 在最终物品层过滤；被禁止的部分按用户规则直接销毁，不进入待输出缓存。
+- 不放过滤书时，不过滤。
+- 填充块与矿物使用同样的过滤和计费规则。
+- 钻井液按过滤前、已经完成整批向下取整的数量计量，每个方块物品消耗 1 L。
+- `drillingLiters(B) = sum(Q_i(B))`，包括稍后被过滤销毁的物品。
+- 不按过滤后数量扣液，不将“总期望先求和再取整”替代“各物品身份整批取整后求和”。
+- 没有物品或流体小数余量账本。原生 IV 采矿逻辑固定消耗的 2000 数量不作为本机成本。
+
+### 3.4 配方识别、三槽与空间塔
+
+机器恰好三个专用 GUI 物品槽：
+
+1. 已绑定玩家的气血宝珠，必需。
+2. 矿物过滤之书，可选。
+3. AE2 空间塔，必需。
+
+焦点配方输入位于输入总线，不新增第四专用槽。默认 GT 控制器槽应复用或替换，不能额外叠加。
+
+识别标准配方后立即取基础半径 r，再以服务端第三槽数量 n 检查：
+
+```java
+3L * (r + 1L) <= n
+```
+
+失败时不查询或扣除 LP，不消耗输入和钻井液。空间塔使用已核实的 AE2 `spatialPylon` 定义，不能猜注册名。
+
+第三槽采用 int 可表示上限 `Integer.MAX_VALUE`，不采用先前建议的 127。合并和阈值比较使用足够宽的中间值并验证范围。必须覆盖保存、同步、普通点击、不同 NBT 交换、Shift 点击、数字键、拖拽、丢弃、拆机；不得把超普通堆叠送入玩家背包、鼠标或 EntityItem。大计数不表示支持任意大半径或无界批量。
+
+### 3.5 宝珠与 LP
+
+- 普通宝珠必须绑定；使用目标 Blood Magic 原生 `ownerName` 网络键，不自行改为 UUID。
+- 阿蒙克宝珠精确身份为 `Avaritia:Orb_Armok`，仍须绑定。
+- 阿蒙克分支成本为零，跳过 LP 查询和扣除，不限制其 LP 批量；仍受其他输入、流体、输出、能源和批量上限限制。
+- 普通宝珠按配方 cost 及批量检查网络余额；使用原生全额扣款并核对返回值。
+- 批量成本先做溢出检查，不将负数或溢出数传给 int LP API。
+
+### 3.6 结构、能源、时间与批处理
+
+- EV 是组装机制作门槛，不是本机运行耗能必须限制在 EV。
+- 基础运行耗能参考标准 IV 采矿场的名义正常工作值 3072 EU/t；保留原生维护、实际抽能等规则的适配。
+- 支持多个普通能源仓（用户称单安仓），或单个原生多安能源仓。用户在阶段 2 已明确二者不混装；不支持多个多安仓或激光仓。
+- 使用通用多方块基类，复用已核实的 IV 几何和公开结构元素，不直接运行钻管或矿区采矿状态机。
+- 普通仓与多安仓的汇总、成型检查和实际供电能力必须按目标源码验证，不能把电压求和当成任意功率承诺。
+- 直径 d = 2 * r + 1，先对 d / 16 向上取整得到 q，再计算：
+  `T0 = 15 * q * q * d`。
+- 使用原生完美超频与原生 128 Tick 批处理规则；旧的 125 Tick 特例不再实施。
+- 批量候选需按 `floor(B * E_i)` 重算输出和过滤前钻井液，不能直接倍增单次已舍入配方。
+- 普通 LP、输入、钻井液、最终保留产物的输出空间及本机计数范围共同限制批量。
+
+### 3.7 开工扣费、输出与损失范围
+
+- 以整份配方或整个批处理批次计算、计费和管理产物，不逐方块推进生产。
+- 开工前完整预检输入、LP、钻井液和过滤后保留产物的整批输出空间；条件不足不启动、不扣费。
+- 资源在配方开始执行时扣除一次；后续进度继续按原生机制消耗 EU。
+- 同一 Tick 内使用原生输出事务；事务对象不跨 Tick 保存。
+- 采用有容量上限、可持久保存的待输出缓存，优先复用原生普通输出和 ME 总线。
+- 不自行实现 Long 输出总线或输出层；内部必要的 long 计数、范围检查和原生分片不受此限制。
+- 已完成产物遇普通堵塞时保留待输出记录，按实际接受数量递减，不重复生成、不重复扣费、不静默清空。
+- 允许原生缓存和堆叠分片搬运；不保证所有外部仓和 ME 磁盘同一瞬间收到整批物品。
+- 处理中跳电允许本批失败、已扣资源损失，不退款、不补发本批尚未完成的产物。
+- 不设计崩溃级恢复、跨存档原子事务、补偿退款或“恰好一次”协议；用户接受崩溃造成产物损失。
+- 上述例外不授权正常运行主动复制物品、重复扣款，或把普通输出堵塞当成随意丢物的理由。正常保存和卸载不能仅因“无需崩溃恢复”而被刻意当作崩溃处理。
+
+### 3.8 过滤书
+
+- 各标准仪式独立配置，默认白名单，支持黑名单，默认包含全部支持仪式及相关物品，含填充块。
+- 使用本 Mod 的稳定来源和配置身份映射，附焦点签名与配置哈希。未知运行期配方需要显式适配，不能合并仪式页。
+- 复制配方消耗一本配置源书和一本默认目标书，返回两本具有源配置的书；不再要求源物品留在原工作台格。
+- 返回物品和 NBT 必须独立复制，编辑其中一本不能修改另一本。
+- 清空配方消耗一本任意配置书，返回一本默认书。
+- 不实施原先为“源书不消耗且留格”准备的事件返还机制；仍须验证成品堆叠、Shift 合成、背包满和自动合成行为。
+
+控制器制作保留原草案的 EV 组装机、空档和基础时间 600 秒，以及指定材料和用量；默认过滤书也保留草案的工作台材料。实际注册身份、同种材料合并和原生输入容量在对应实施阶段核验；若存在限制，先报告证据，不自行替换材料、数量或制作机器。
+
+## 4. 构建、依赖与侵入技术
+
+- 用户已经允许新增实现本目标所必需的开发依赖。后续授权实施阶段应列明用途，采用精确 GTNH 2.9.0 正式版匹配版本，不对已授权必要项重复申请同一许可。
+- 在获准实施的阶段配置必要依赖，不任意引入 Mod 或升级版本。额外功能依赖和 TST 仍需单独明确授权。
+- 不修改 Wrapper、JDK Toolchain、代理、缓存目录和现有构建基础设施。
+- 保持 Java 8 字节码与 API 兼容，不能复制上游现代 Java 标准库调用后宣称兼容。
+- 优先公开 API、继承、组合、Forge 事件及原生处理接口。
+- 未获明确批准，不新增 Mixin、Coremod、ASM、运行时补丁、Access Transformer 或私有反射。
+- 如存在真实限制，先列具体类/方法/权限、非侵入替代、影响及风险，再提案，不用侵入式技术掩盖未核实的问题。
+
+## 5. 重排后的开发阶段
+
+完整范围、前置、验收见 `docs/DEVELOPMENT_PLAN.md`。
+
+1. 反馈基线与必要技术收口。已完成文档重建和定向公开扩展点复核，见 `docs/STAGE1_CLOSURE.md`；不重复整包泛查。
+2. 必要依赖、基础物品、通用多方块与三槽 GUI。开发端已实现并通过构建/模块测试；游戏验收见 `docs/STAGE2_GAME_ACCEPTANCE.md`。
+3. 标准配方目录、理想环境期望和整批向下取整的独立计算引擎。
+4. LP、过滤前钻井液、时间、完美超频、原生 128 Tick 批处理及开工扣费逻辑。
+5. 最终物品过滤书、独立书页、两本返回复制与单书清空。
+6. 原生普通/ME 输出、同 Tick 提交和有界持久待输出缓存。
+7. 整机整合、正常保存/暂停/卸载、跳电失败及性能验证。
+8. 用户执行正式整包游戏验收，开发端提供步骤、预期和修复报告。
+
+必要 API 已接入，阶段 2 结果见 `docs/STAGE2_IMPLEMENTATION.md`。未运行游戏，不冒称整机行为已验收；各阶段结束报告并停止，不自动进入阶段 3。
+
+## 6. 证据、日志与测试
+
+- 维护 `docs/DEVELOPMENT_PLAN.md`、`docs/TECHNICAL_DECISIONS.md`、`docs/DEVELOPMENT_LOG.md` 和阶段报告。
+- 每次有意义的会话和 Codex 任务结束时追加日志：日期、阶段、授权范围、实际修改/调查、结论、命令与结果、限制、下一步。
+- 技术结论提供精确版本、路径、类/方法、行号；原始与反编译证据分开，建议与事实分开。
+- 旧数学和文档审计结果是历史快照，不能冒称已经验证新代码或新规则。
+- 纯数学和模块测试无需游戏实例。用户负责 Minecraft 载入及真实成型、GUI、LP、ME 和 TPS/MSPT 验收。
+- 不运行原版随机生成作机器产物引擎，不用静态分析或脚本耗时冒充游戏性能实测。
+- 性能重点为不可变配方/概率缓存、变更驱动查询、按物品种类而非总件数遍历、有界搬运和适当的服务端同步。

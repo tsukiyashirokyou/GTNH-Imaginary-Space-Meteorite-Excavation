@@ -1,0 +1,13 @@
+item.imaginaryspacemeteoriteexcavation.filtering_book.name=矿物过滤之书
+gt.blockmachines.imaginaryspacemeteoriteexcavation.meteorite_excavation.name=虚数陨星采矿场
+isme.gui.orb=绑定宝珠
+isme.gui.book=过滤之书
+isme.gui.pylons=空间塔
+isme.gui.tower_count=空间塔数量：%s
+isme.gui.missing_pylons=缺少空间塔
+isme.gui.radius=塔数量支持的半径：%s
+isme.gui.none=无
+isme.gui.missing_orb=缺少已绑定的气血宝珠
+isme.gui.owner=灵魂网络所属：%s
+isme.gui.energy=能源仓：普通 %s / 多安 %s
+isme.gui.foundation=基础阶段：暂不执行配方

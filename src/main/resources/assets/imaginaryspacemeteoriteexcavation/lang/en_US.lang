@@ -1,0 +1,13 @@
+item.imaginaryspacemeteoriteexcavation.filtering_book.name=Filtering Book
+gt.blockmachines.imaginaryspacemeteoriteexcavation.meteorite_excavation.name=Imaginary Space Meteorite Excavation
+isme.gui.orb=Bound Orb
+isme.gui.book=Filter Book
+isme.gui.pylons=Pylons
+isme.gui.tower_count=Spatial pylons: %s
+isme.gui.missing_pylons=Missing spatial pylons
+isme.gui.radius=Supported radius: %s
+isme.gui.none=None
+isme.gui.missing_orb=Missing bound Blood Orb
+isme.gui.owner=Bound to: %s
+isme.gui.energy=Energy: %s normal / %s multi
+isme.gui.foundation=Processing unavailable

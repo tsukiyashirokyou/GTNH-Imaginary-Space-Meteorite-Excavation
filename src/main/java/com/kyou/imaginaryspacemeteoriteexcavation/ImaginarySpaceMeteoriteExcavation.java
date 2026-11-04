@@ -14,6 +14,7 @@ import cpw.mods.fml.common.event.FMLServerStartingEvent;
     modid = ImaginarySpaceMeteoriteExcavation.MODID,
     version = Tags.VERSION,
     name = ImaginarySpaceMeteoriteExcavation.MODNAME,
+    dependencies = "required-after:gregtech;required-after:gregtech_nh;required-after:structurelib;required-after:gtnhlib;required-after:modularui2;required-after:appliedenergistics2;required-after:AWWayofTime",
     acceptedMinecraftVersions = "[1.7.10]")
 public class ImaginarySpaceMeteoriteExcavation {
 
