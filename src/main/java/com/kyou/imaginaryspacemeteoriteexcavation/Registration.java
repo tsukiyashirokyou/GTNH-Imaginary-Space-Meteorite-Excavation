@@ -2,11 +2,15 @@ package com.kyou.imaginaryspacemeteoriteexcavation;
 
 import net.minecraft.item.ItemStack;
 
+import com.kyou.imaginaryspacemeteoriteexcavation.filter.crafting.CopyRemainderGuard;
+import com.kyou.imaginaryspacemeteoriteexcavation.filter.crafting.DefaultBookRecipe;
+import com.kyou.imaginaryspacemeteoriteexcavation.filter.crafting.FilterBookRecipe;
 import com.kyou.imaginaryspacemeteoriteexcavation.item.FilteringBook;
 import com.kyou.imaginaryspacemeteoriteexcavation.machine.MeteoriteExcavation;
 
 import WayofTime.alchemicalWizardry.ModBlocks;
 import appeng.api.AEApi;
+import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.registry.GameRegistry;
 import gregtech.api.GregTechAPI;
 import gregtech.api.enums.GTValues;
@@ -82,5 +86,23 @@ public final class Registration {
             .duration(600 * 20)
             .eut(TierEU.RECIPE_EV)
             .addTo(RecipeMaps.assemblerRecipes);
+    }
+
+    public static void registerBookRecipes() {
+        // EnderIO 2.10.51 ItemBigItemFilter.init(); metadata 0 is the non-advanced 24-entry filter.
+        ItemStack filter = GameRegistry.findItemStack("EnderIO", "itemBigFilterUpgrade", 1);
+        if (filter == null) throw new IllegalStateException("GTNH 2.9.0 Big Item Filter is unavailable");
+        filter.setItemDamage(0);
+        GameRegistry.addRecipe(
+            new DefaultBookRecipe(
+                filter,
+                ItemList.Tool_DataOrb.get(1L),
+                filteringBook.books()
+                    .defaults(1)));
+        GameRegistry.addRecipe(new FilterBookRecipe(filteringBook.books(), true));
+        GameRegistry.addRecipe(new FilterBookRecipe(filteringBook.books(), false));
+        FMLCommonHandler.instance()
+            .bus()
+            .register(new CopyRemainderGuard(filteringBook.books()));
     }
 }

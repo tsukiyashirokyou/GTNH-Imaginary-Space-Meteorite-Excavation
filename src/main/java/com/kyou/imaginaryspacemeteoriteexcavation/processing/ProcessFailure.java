@@ -1,0 +1,18 @@
+package com.kyou.imaginaryspacemeteoriteexcavation.processing;
+
+public enum ProcessFailure {
+    NONE,
+    NO_RECIPE,
+    INSUFFICIENT_TOWERS,
+    UNBOUND_ORB,
+    INSUFFICIENT_INPUT,
+    INSUFFICIENT_LP,
+    NETWORK_UNAVAILABLE,
+    INSUFFICIENT_DRILLING_FLUID,
+    OUTPUT_FULL,
+    INSUFFICIENT_POWER,
+    UNSUPPORTED_INPUT,
+    OVERFLOW,
+    CONDITIONS_CHANGED,
+    ALREADY_DECIDED
+}
