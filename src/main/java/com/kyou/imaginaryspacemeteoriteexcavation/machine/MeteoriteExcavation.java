@@ -260,8 +260,9 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
             verifyLocalInputs();
             List<ItemStack> order = new ArrayList<>();
             for (MTEHatchInputBus bus : mInputBusses) {
+                int circuit = LocalStartResources.recipeCircuitSlot(bus);
                 for (int slot = 0; slot < bus.getSizeInventory(); slot++) {
-                    if (slot != bus.getCircuitSlot()) order.add(bus.getStackInSlot(slot));
+                    if (slot != circuit) order.add(bus.getStackInSlot(slot));
                 }
             }
             Optional<RecipeCatalogue.Entry<ItemIdentity>> found = MeteorRecipeResolver.first(catalogue, order);
@@ -387,11 +388,11 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
     private void verifyLocalInputs() {
         Set<MTEHatch> unique = Collections.newSetFromMap(new IdentityHashMap<>());
         for (MTEHatchInputBus bus : mInputBusses) {
-            if (bus == null || bus.getClass() != MTEHatchInputBus.class || !bus.isValid() || !unique.add(bus))
+            if (!LocalStartResources.supportsItemBus(bus) || !bus.isValid() || !unique.add(bus))
                 throw new UnsupportedOperationException("Unverified/duplicate item input");
         }
         for (MTEHatchInput hatch : mInputHatches) {
-            if (hatch == null || hatch.getClass() != MTEHatchInput.class || !hatch.isValid() || !unique.add(hatch))
+            if (!LocalStartResources.supportsFluidHatch(hatch) || !hatch.isValid() || !unique.add(hatch))
                 throw new UnsupportedOperationException("Unverified/duplicate fluid input");
         }
         for (MTEHatch hatch : mEnergyHatches) {

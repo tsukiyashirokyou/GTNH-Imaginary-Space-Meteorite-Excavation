@@ -17,6 +17,11 @@ public final class MachinePower {
     }
 
     public static MachinePower fromHatches(int normal, int multiAmp, long[] voltages, long[] workingAmperes) {
+        return fromHatches(normal, multiAmp, voltages, workingAmperes, false);
+    }
+
+    public static MachinePower fromHatches(int normal, int multiAmp, long[] voltages, long[] workingAmperes,
+        boolean debugEnergyPresent) {
         if (!EnergyLayout.isValid(normal, multiAmp) || voltages.length != normal + multiAmp
             || workingAmperes.length != voltages.length) {
             throw new IllegalArgumentException("Invalid energy hatch layout");
@@ -31,8 +36,8 @@ public final class MachinePower {
             actualPower = Math.addExact(actualPower, Math.multiplyExact(voltages[i], workingAmperes[i]));
         }
         long average = voltageSum / voltages.length;
-        // Native setupProcessingLogic uses one amp for exactly one ordinary hatch.
-        if (normal == 1 && multiAmp == 0) amps = 1;
+        // Native setProcessingLogicPower exempts debug energy from the single ordinary hatch restriction.
+        if (!debugEnergyPresent && normal == 1 && multiAmp == 0) amps = 1;
         amps = Math.min(amps, actualPower / average);
         return new MachinePower(average, amps);
     }

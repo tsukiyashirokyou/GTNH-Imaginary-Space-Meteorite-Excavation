@@ -1,0 +1,4 @@
+// Use GTNHGradle's native minimized API shading, isolated from the pack's older JVM Downgrader API.
+tasks.matching { it.name == 'shadeDowngradedApi' }.configureEach {
+    shadePath = 'com/kyou/imaginaryspacemeteoriteexcavation/internal/jvmdg/'
+}

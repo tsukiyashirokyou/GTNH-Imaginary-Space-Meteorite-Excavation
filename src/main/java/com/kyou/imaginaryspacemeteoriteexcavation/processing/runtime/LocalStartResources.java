@@ -1,6 +1,7 @@
 package com.kyou.imaginaryspacemeteoriteexcavation.processing.runtime;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -14,43 +15,82 @@ import com.kyou.imaginaryspacemeteoriteexcavation.processing.ProcessingPorts;
 import gregtech.api.enums.ItemList;
 import gregtech.api.metatileentity.implementations.MTEHatchInput;
 import gregtech.api.metatileentity.implementations.MTEHatchInputBus;
+import gregtech.api.metatileentity.implementations.MTEHatchInputBusDebug;
+import gregtech.api.metatileentity.implementations.MTEHatchInputDebug;
 
-/** Snapshots ordinary local storage; never drains a remote ME/dual/multi-fluid inventory. */
+/** Local storage plus native debug offers; never drains remote ME/dual or unknown multi-fluid inventory. */
 public final class LocalStartResources implements ProcessingPorts.Resources {
 
     private final List<Supplier<ItemStack>> itemCells;
+    private final BitSet virtualItems;
     private final List<Supplier<FluidStack>> fluidCells;
+    private final BitSet virtualFluids;
     private final Fluid drilling;
     private final Runnable markDirty;
 
-    private LocalStartResources(List<Supplier<ItemStack>> itemCells, List<Supplier<FluidStack>> fluidCells,
-        Fluid drilling, Runnable markDirty) {
+    private LocalStartResources(List<Supplier<ItemStack>> itemCells, BitSet virtualItems,
+        List<Supplier<FluidStack>> fluidCells, BitSet virtualFluids, Fluid drilling, Runnable markDirty) {
         this.itemCells = itemCells;
+        this.virtualItems = virtualItems;
         this.fluidCells = fluidCells;
+        this.virtualFluids = virtualFluids;
         this.drilling = drilling;
         this.markDirty = markDirty;
+    }
+
+    public static boolean supportsItemBus(MTEHatchInputBus bus) {
+        return bus != null
+            && (bus.getClass() == MTEHatchInputBus.class || bus.getClass() == MTEHatchInputBusDebug.class);
+    }
+
+    public static boolean supportsFluidHatch(MTEHatchInput hatch) {
+        return hatch != null
+            && (hatch.getClass() == MTEHatchInput.class || hatch.getClass() == MTEHatchInputDebug.class);
+    }
+
+    /** Debug exposes phantom slots 0..15 and moves its physical circuit to virtual slot 16. */
+    public static int recipeCircuitSlot(MTEHatchInputBus bus) {
+        return bus.getClass() == MTEHatchInputBusDebug.class ? bus.getSizeInventory() - 1 : bus.getCircuitSlot();
     }
 
     public static LocalStartResources ordinary(List<MTEHatchInputBus> busses, List<MTEHatchInput> hatches) {
         List<MTEHatchInputBus> localBusses = new ArrayList<>(busses);
         List<MTEHatchInput> localHatches = new ArrayList<>(hatches);
         List<Supplier<ItemStack>> items = new ArrayList<>();
+        BitSet virtual = new BitSet();
         List<Supplier<FluidStack>> fluids = new ArrayList<>();
+        BitSet virtualFluid = new BitSet();
         for (MTEHatchInputBus bus : localBusses) {
-            if (bus.getClass() != MTEHatchInputBus.class)
-                throw new UnsupportedOperationException("Non-ordinary item input");
+            if (!supportsItemBus(bus)) throw new UnsupportedOperationException("Non-ordinary item input");
+            int circuit = recipeCircuitSlot(bus);
             for (int slot = 0; slot < bus.getSizeInventory(); slot++) {
-                if (slot == bus.getCircuitSlot()) continue;
+                if (slot == circuit) continue;
                 final int index = slot;
+                if (bus.getClass() == MTEHatchInputBusDebug.class) virtual.set(items.size());
                 items.add(() -> bus.getStackInSlot(index));
             }
         }
         for (MTEHatchInput hatch : localHatches) {
-            if (hatch.getClass() != MTEHatchInput.class)
-                throw new UnsupportedOperationException("Non-ordinary fluid input");
-            fluids.add(hatch::getFluid);
+            if (!supportsFluidHatch(hatch)) throw new UnsupportedOperationException("Unverified fluid input");
+            if (hatch.getClass() == MTEHatchInputDebug.class) {
+                MTEHatchInputDebug debug = (MTEHatchInputDebug) hatch;
+                // Native getStoredFluids exposes every configured debug slot, not only getFluid()'s first one.
+                for (int slot = 0; slot < debug.getFluidList().length; slot++) {
+                    final int index = slot;
+                    virtualFluid.set(fluids.size());
+                    fluids.add(() -> {
+                        FluidStack sample = debug.getFluidList()[index];
+                        if (sample == null) return null;
+                        FluidStack offer = sample.copy();
+                        offer.amount = Integer.MAX_VALUE;
+                        return offer;
+                    });
+                }
+            } else {
+                fluids.add(hatch::getFluid);
+            }
         }
-        return new LocalStartResources(items, fluids, ItemList.sDrillingFluid, () -> {
+        return new LocalStartResources(items, virtual, fluids, virtualFluid, ItemList.sDrillingFluid, () -> {
             for (MTEHatchInputBus bus : localBusses) bus.markDirty();
             for (MTEHatchInput hatch : localHatches) hatch.markDirty();
         });
@@ -68,7 +108,7 @@ public final class LocalStartResources implements ProcessingPorts.Resources {
             final int index = i;
             fluidCells.add(() -> fluids[index]);
         }
-        return new LocalStartResources(itemCells, fluidCells, drilling, dirty);
+        return new LocalStartResources(itemCells, new BitSet(), fluidCells, new BitSet(), drilling, dirty);
     }
 
     @Override
@@ -155,14 +195,18 @@ public final class LocalStartResources implements ProcessingPorts.Resources {
                 public boolean unchanged() {
                     if (applied) return false;
                     for (int i = 0; i < itemRefs.length; i++) {
-                        if (itemCells.get(i)
-                            .get() != itemRefs[i] || !ItemStack.areItemStacksEqual(itemRefs[i], itemCopies[i]))
-                            return false;
+                        ItemStack current = itemCells.get(i)
+                            .get();
+                        // Debug getters return fresh, non-consumable offers. Revalidate their full value instead.
+                        if ((!virtualItems.get(i) && current != itemRefs[i])
+                            || !ItemStack.areItemStacksEqual(current, itemCopies[i])) return false;
                     }
                     for (int i = 0; i < fluidRefs.length; i++) {
-                        if (fluidCells.get(i)
-                            .get() != fluidRefs[i]) return false;
-                        if (fluidRefs[i] != null && !fluidRefs[i].isFluidStackIdentical(fluidCopies[i])) return false;
+                        FluidStack current = fluidCells.get(i)
+                            .get();
+                        if (!virtualFluids.get(i) && current != fluidRefs[i]) return false;
+                        if (current == null ? fluidCopies[i] != null : !current.isFluidStackIdentical(fluidCopies[i]))
+                            return false;
                     }
                     return true;
                 }
@@ -173,10 +217,10 @@ public final class LocalStartResources implements ProcessingPorts.Resources {
                     applied = true;
                     // No callback or possibly-partial native drain between LP deduction and these local field writes.
                     for (int i = 0; i < itemRefs.length; i++) {
-                        if (itemDebits[i] > 0) itemRefs[i].stackSize -= itemDebits[i];
+                        if (!virtualItems.get(i) && itemDebits[i] > 0) itemRefs[i].stackSize -= itemDebits[i];
                     }
                     for (int i = 0; i < fluidRefs.length; i++) {
-                        if (fluidDebits[i] > 0) fluidRefs[i].amount -= fluidDebits[i];
+                        if (!virtualFluids.get(i) && fluidDebits[i] > 0) fluidRefs[i].amount -= fluidDebits[i];
                     }
                     markDirty.run();
                 }

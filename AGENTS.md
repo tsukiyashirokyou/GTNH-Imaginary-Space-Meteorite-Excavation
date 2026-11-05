@@ -1,6 +1,6 @@
 # AGENTS.md — Imaginary Space Meteorite Excavation
 
-更新日期：2026-11-05。阶段 1 至 7、ME 原生模式调整及针对性规划优化/WAILA 已完成开发端验证，控制器生产入口已接通。后续空间塔公式调整完成，96 项测试、完整构建及独立 Java 8 通过，见 docs/TOWER_RADIUS_RULE.md；外部测试支持条件沿用阶段 7。50 项人工游戏测试由用户统一执行，阶段 8 尚未人工执行。
+更新日期：2026-11-05。阶段 1 至 7、ME 输出、规划优化/WAILA 和空间塔公式调整已完成开发端验证，控制器生产入口已接通。现代 Java 构建采用 JDK 25、官方 JVM Downgrader、Java 8 基础字节码与 MR 17/21/25，见 docs/MODERN_JAVA_BUILD.md。最新原生 debug 仓体及流体输入仓兼容已完成，100 项测试及发布 JAR 直接类加载在 Java 8/17/21/25 通过，最新见 docs/DEBUG_FLUID_INPUT_COMPATIBILITY.md。54 项人工游戏测试由用户统一执行，阶段 8 尚未人工执行。
 
 ## 1. 项目身份与文档优先级
 
@@ -10,7 +10,7 @@
 - Group ID / Java 包：`com.kyou.imaginaryspacemeteoriteexcavation`
 - Minecraft：1.7.10
 - 目标整合包：GTNH 2.9.0 正式稳定版
-- 兼容性：Java 8 字节码及 API；这不表示可以更改现有 JDK Toolchain。
+- 兼容性：项目使用 JDK 25 标准非预览语法及经验证可降级的新 API；官方 JVM Downgrader 生成 Java 8 基础字节码及 MR 17/21/25 分支。不能把开发 JDK、源码级别和游戏运行 JVM 混同；新 API 须经过降级及目标运行时验证，见 docs/MODERN_JAVA_BUILD.md。
 - 本项目为独立附属 Mod，不修改 GTNH 核心源码。
 
 执行任务时采用以下顺序：
@@ -98,6 +98,7 @@
 - EV 是组装机制作门槛，不是本机运行耗能必须限制在 EV。
 - 基础运行耗能参考标准 IV 采矿场的名义正常工作值 3072 EU/t；保留原生维护、实际抽能等规则的适配。
 - 支持多个普通能源仓（用户称单安仓），或单个原生多安能源仓。用户在阶段 2 已明确二者不混装；不支持多个多安仓或激光仓。
+- 原生 debug 能源仓计入普通能源仓，沿用 GT5U 的 debug 例外：单个 debug 仓使用配置工作电流，不强制 1A；仍实际抽 EU，不绕过布局、正数和溢出检查。debug 维护仓复用父类维护回调。
 - 使用通用多方块基类，复用已核实的 IV 几何和公开结构元素，不直接运行钻管或矿区采矿状态机。
 - 普通仓与多安仓的汇总、成型检查和实际供电能力必须按目标源码验证，不能把电压求和当成任意功率承诺。
 - 直径 d = 2 * r + 1，先对 d / 16 向上取整得到 q，再计算：
@@ -148,8 +149,8 @@ WAILA 已通过原生 getExtraWailaNBT 和父类显示接口接入，只同步�
 
 - 用户已经允许新增实现本目标所必需的开发依赖。后续授权实施阶段应列明用途，采用精确 GTNH 2.9.0 正式版匹配版本，不对已授权必要项重复申请同一许可。
 - 在获准实施的阶段配置必要依赖，不任意引入 Mod 或升级版本。额外功能依赖和 TST 仍需单独明确授权。
-- 不修改 Wrapper、JDK Toolchain、代理、缓存目录和现有构建基础设施。
-- 保持 Java 8 字节码与 API 兼容，不能复制上游现代 Java 标准库调用后宣称兼容。
+- 保持当前 Wrapper、GTNHGradle、Forge 与 Mod 依赖版本、代理和缓存配置；使用现有 GTNHGradle 2.0.33 官方 jvmDowngrader 模式的 JDK 25 Toolchain，不擅自添加 forceToolchainVersion 或全局覆盖 RFG 自身 Java 8 编译器。用户本轮已明确授权现代 Java 构建调整，不再受旧的“Toolchain 一律不改”约束。
+- 允许现代 Java 语法和适当新 API，不因兼容 Java 8 而统一退回旧语法/API。保留发布根目录 Java 8 目标；只有 JVM Downgrader 支持且实际验证的现代 API 可用于兼容路径，不把编译通过当运行保证。采用官方 shade 模式、项目私有前缀和对应许可证，避免依赖 GTNHLib 0.11.54 较旧的共享 API。
 - 优先公开 API、继承、组合、Forge 事件及原生处理接口。
 - 未获明确批准，不新增 Mixin、Coremod、ASM、运行时补丁、Access Transformer 或私有反射。
 - 如存在真实限制，先列具体类/方法/权限、非侵入替代、影响及风险，再提案，不用侵入式技术掩盖未核实的问题。
@@ -167,11 +168,11 @@ WAILA 已通过原生 getExtraWailaNBT 和父类显示接口接入，只同步�
 7. 整机整合、正常保存/暂停/卸载、跳电失败及性能验证。开发端已完成；80 项总测试、独立 Java 8 运行及合成性能探针通过，见 `docs/STAGE7_IMPLEMENTATION.md`。真实成型、完整原生批处理生命周期、LP、ME 和 TPS/MSPT 仍由用户游戏验收。
 8. 阶段 2 至 7 的开发实现及开发端验证完成后，由用户统一执行正式整包游戏验收，开发端提供步骤、预期和修复报告。
 
-必要 API 已接入；阶段 2 至 7 结果见相应实施报告。目录使用正式版 57 份配置的稳定来源映射，匹配实际注册快照；未知/改动/重复焦点明确诊断。本地扣费仅支持普通物品输入总线/单液输入仓，不支持 ME、双输入等。控制器在同 Tick 复核条件后一次开工，PreparedProcess 不持久化；PaidBatch 只保存已经付费的输出快照和元数据，原生输出数组只是空的完工触发标记。完成后只转入 pending 一次。正常暂停/保存/卸载不清账；卸载后重建仓体再继续。跳电终止未完成批次并标脏，普通控制器掉落携带本机状态，不另展开产物。
+必要 API 已接入；阶段 2 至 7 结果见相应实施报告。目录使用正式版 57 份配置的稳定来源映射，匹配实际注册快照；未知/改动/重复焦点明确诊断。本地输入支持精确的普通物品输入总线、原生 MTEHatchInputBusDebug、普通单液输入仓和原生 MTEHatchInputDebug，不支持 ME、双输入、其他未知子类。debug 物品输入按原生有限/无限虚拟数量参与批量，不消耗配置样板；槽 0..15 为配方输入，虚拟槽 16 的物理电路必须排除，见 docs/DEBUG_HATCH_COMPATIBILITY.md。debug 流体仓按全部 16 个配置槽提供各 Integer.MAX_VALUE 的虚拟流体，不消耗流体样板；钻井液成本计算不变，只有分配给普通流体仓的部分物理扣除。两类虚拟输入开工前均重验完整暴露值，LP 仍按原规则扣除，见 docs/DEBUG_FLUID_INPUT_COMPATIBILITY.md。控制器在同 Tick 复核条件后一次开工，PreparedProcess 不持久化；PaidBatch 只保存已经付费的输出快照和元数据，原生输出数组只是空的完工触发标记。完成后只转入 pending 一次。正常暂停/保存/卸载不清账；卸载后重建仓体再继续。跳电终止未完成批次并标脏，普通控制器掉落携带本机状态，不另展开产物。
 
 输出只支持核实的原生普通/压缩/ME 总线，拒绝未知子类、重复引用和总线内主动 void/overflow；按原生模式接管，保留 long 累加溢出保护，不额外按 ME 物理余量截断。正常堵塞重试；不确定提交和坏存档保留并封锁。失败规划/无进展输出至多每 20 Tick 重试；预览按付费计划引用和 pending revision 变更刷新。没有新增客户端状态写入通道或崩溃补偿协议。
 
-独立 Java 8 控制器测试需现有 JVM Downgrader 2.0.1 工具缓存内的原样 API，详见阶段 7 的 run-java8.py 和 java8-support.json；不因此修改 Mod/Gradle 依赖。它不能证明正式整包 DepLoader 的实际 Java 8 类加载，统一留 A-01 核对。未运行游戏，不冒称真实注册表或整机行为已验收；交付后停止，不代替用户执行阶段 8。
+阶段 7 至空间塔调整的独立 Java 8 脚本及手动 API 支持是历史记录。当前插件自动提供匹配的测试 API，测试使用 downgradeMain/downgradeTest；以 docs/modern-java-evidence/verify-runtimes.py 和当前任务类路径为准，不能在 Java 8 直接加载 build/classes/java 下的 Java 25 原始类。默认 runClient/runServer 仍是 Java 8 兼容路径，现代游戏使用官方带版本启动任务；runClient25/runServer25 可能需下载 JetBrains 25。开发端测试及发布 JAR 直接类加载不代表完整 Forge/整包已启动，A-01 仍未执行。
 
 ## 6. 证据、日志与测试
 

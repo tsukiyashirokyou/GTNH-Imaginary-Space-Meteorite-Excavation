@@ -1,0 +1,18 @@
+JVM Downgrader Java API 2.0.1
+Copyright (C) 2024 William Gray <jvmdowngrader@wagyourtail.xyz>
+
+This Mod uses GTNHGradle 2.0.33's JVM Downgrader 2.0.1 integration. Only required
+API support is minimized and relocated under this Mod's private package. The
+original third-party API source is not modified.
+
+Upstream source and build instructions:
+https://github.com/unimined/JvmDowngrader/tree/2.0.1
+https://github.com/unimined/JvmDowngrader/blob/2.0.1/LICENSE.md
+
+The original upstream LICENSE.md and GNU LGPL version 2.1 text are included
+alongside this notice. The library is used under LGPL version 2.1.
+
+To rebuild the combined work or replace the API, use the corresponding Mod
+source distribution and its pinned Gradle build. GTNHGradle's pre-downgrade
+and pre-shading JAR tasks also retain the uncombined classes in build output.
+See docs/MODERN_JAVA_BUILD.md in the Mod source for the exact configuration.
