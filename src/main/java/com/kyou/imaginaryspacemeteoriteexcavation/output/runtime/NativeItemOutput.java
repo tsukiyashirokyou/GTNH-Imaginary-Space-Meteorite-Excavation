@@ -95,8 +95,10 @@ public final class NativeItemOutput
                 safeBusses.add(
                     new BoundedOutputBus(
                         me,
-                        () -> me.getProvider()
-                            .getPhysicalSpace(),
+                        // Native ME admission may exceed physical capacity. Only prevent its unchecked long sum
+                        // from overflowing; a negative physical remainder is normal backpressure after an overshoot.
+                        () -> Long.MAX_VALUE - me.getProvider()
+                            .getCachedAmount(),
                         () -> safeME(me)));
             } else if (type == MTEHatchOutputBus.class || type == MTEHatchOutputBusCompressed.class) {
                 slots += type == MTEHatchOutputBusCompressed.class ? ((MTEHatchOutputBusCompressed) bus).slotCount
@@ -130,8 +132,6 @@ public final class NativeItemOutput
                 .getCacheCapacity() < Long.MAX_VALUE
             && me.getProvider()
                 .getCachedAmount() >= 0
-            && me.getProvider()
-                .getPhysicalSpace() >= 0
             && (cell == null || !(cell.getItem() instanceof ItemVoidStorageCell));
     }
 }

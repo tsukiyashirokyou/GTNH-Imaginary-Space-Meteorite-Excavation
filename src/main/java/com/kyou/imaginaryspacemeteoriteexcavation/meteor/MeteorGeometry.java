@@ -35,6 +35,17 @@ public final class MeteorGeometry {
 
     public static boolean hasEnoughTowers(int radius, int towers) {
         positions(radius);
-        return towers >= 0 && 3L * (radius + 1L) <= towers;
+        return towers >= 0 && requiredTowers(radius) <= towers;
+    }
+
+    /** Equivalent to (2r + 1) <= n / 3 - 1, without division in the admission check. */
+    public static long requiredTowers(int radius) {
+        if (radius < 0) throw new IllegalArgumentException("Negative radius: " + radius);
+        return 6L * (radius + 1L);
+    }
+
+    /** Arithmetic tower limit for display only; does not expand the audited standard recipe domain. */
+    public static int maxRadiusForTowers(int towers) {
+        return Math.max(0, towers / 6 - 1);
     }
 }

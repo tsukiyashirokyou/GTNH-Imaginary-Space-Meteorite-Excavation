@@ -16,7 +16,10 @@ import net.minecraft.nbt.NBTTagCompound;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import com.kyou.imaginaryspacemeteoriteexcavation.machine.PublicTileFixture;
 import com.kyou.imaginaryspacemeteoriteexcavation.meteor.runtime.ItemIdentity;
+import com.kyou.imaginaryspacemeteoriteexcavation.output.OutputLimits;
+import com.kyou.imaginaryspacemeteoriteexcavation.output.PendingOutputs;
 import com.kyou.imaginaryspacemeteoriteexcavation.processing.HeadlessForgeFixture;
 
 import gregtech.api.enums.OutputBusType;
@@ -26,6 +29,7 @@ import gregtech.api.interfaces.IOutputTransaction;
 import gregtech.api.interfaces.ITexture;
 import gregtech.api.metatileentity.implementations.MTEHatchOutputBus;
 import gregtech.api.util.GTUtility;
+import gregtech.common.tileentities.machines.outputme.MTEHatchOutputBusME;
 
 /** Executes the exact target ItemEjectionHelper; destinations are explicit fault-injection test doubles. */
 public final class NativeOutputTest {
@@ -62,6 +66,17 @@ public final class NativeOutputTest {
 
     private static IOutputBus bounded(FakeBus bus) {
         return new BoundedOutputBus(bus, () -> bus.capacity - bus.stored, () -> bus.safe);
+    }
+
+    private static MTEHatchOutputBusME nativeMe() {
+        MTEHatchOutputBusME me = new MTEHatchOutputBusME("test_me", 4, new String[0], new ITexture[0][][]);
+        me.getProvider()
+            .onPostTick(new PublicTileFixture().bind(me), 1);
+        return me;
+    }
+
+    private static NativeItemOutput port(PendingItemOutput pending, MTEHatchOutputBus... buses) {
+        return new NativeItemOutput(pending, () -> Arrays.asList(buses), () -> 1, () -> true);
     }
 
     @Test
@@ -239,34 +254,140 @@ public final class NativeOutputTest {
         assertEquals(75, bus.stored);
     }
 
+    private static FakeBus modeledMe() {
+        FakeBus me = new FakeBus(1600, true);
+        me.nativeAdmission = true;
+        return me;
+    }
+
+    private static IOutputBus nativePolicy(FakeBus me) {
+        return new BoundedOutputBus(me, () -> Long.MAX_VALUE - me.stored, () -> me.safe && me.stored >= 0);
+    }
+
     @Test
-    public void permissiveMePolicyCannotOverrunPhysicalCacheAndOfflineFullCacheRetains() throws Exception {
-        if (delegated("permissiveMePolicyCannotOverrunPhysicalCacheAndOfflineFullCacheRetains")) return;
-        FakeBus me = new FakeBus(10, true);
-        Map<ItemIdentity, Long> receipt = NativeOutputTransactions
-            .execute(pair(20, 20), Arrays.asList(bounded(me)), false, () -> 1, () -> true);
+    public void modeledMeAcceptsLongBatchWithOneFreeItemThenBlocksNextPrecheck() throws Exception {
+        if (delegated("modeledMeAcceptsLongBatchWithOneFreeItemThenBlocksNextPrecheck")) return;
+        FakeBus me = modeledMe();
+        me.stored = 1599;
+        long count = 2L * Integer.MAX_VALUE + 51;
+        Map<ItemIdentity, Long> items = pair(count, 40);
         assertEquals(
-            10,
-            receipt.values()
-                .stream()
-                .mapToLong(Long::longValue)
-                .sum());
-        assertEquals(10, me.stored);
+            items,
+            NativeOutputTransactions.execute(items, Arrays.asList(nativePolicy(me)), true, () -> 1, () -> true));
+        assertEquals(1599, me.stored);
+        PendingItemOutput pending = new PendingItemOutput();
+        pending.complete(items);
+        assertEquals(
+            count + 40,
+            pending.flush(
+                1,
+                offered -> NativeOutputTransactions
+                    .execute(offered, Arrays.asList(nativePolicy(me)), false, () -> 1, () -> true)));
+        assertFalse(pending.blocksStart());
+        assertEquals(1599 + count + 40, me.stored);
+        assertEquals(Integer.MAX_VALUE, me.maxOffer);
         assertEquals(1, me.commits);
         assertTrue(
-            NativeOutputTransactions.execute(pair(20, 20), Arrays.asList(bounded(me)), false, () -> 2, () -> true)
+            NativeOutputTransactions
+                .execute(
+                    Collections.singletonMap(id(ore), 1L),
+                    Arrays.asList(nativePolicy(me)),
+                    true,
+                    () -> 1,
+                    () -> true)
                 .isEmpty());
-        assertEquals(1, me.commits);
-        // Network recovery flushes the native cache. Only then can a new local transaction accept more.
-        me.stored = 0;
+    }
+
+    @Test
+    public void nativeMeCheckModeUsesJointPhysicalCapacityWithoutCommittingSimulation() throws Exception {
+        if (delegated("nativeMeCheckModeUsesJointPhysicalCapacityWithoutCommittingSimulation")) return;
+        // This exact target transaction branch does not initialize AEStack or require a loaded AE registry.
+        MTEHatchOutputBusME me = nativeMe();
+        me.getProvider()
+            .setCheckMode(true);
+        NativeItemOutput port = port(new PendingItemOutput(), me);
+        assertFalse(port.canAccept(pair(1600, 1)));
+        assertTrue(port.canAccept(pair(1500, 100)));
+        assertFalse(port.canAccept(Collections.singletonMap(id(ore), OutputLimits.TOTAL)));
         assertEquals(
-            10,
-            NativeOutputTransactions.execute(pair(20, 20), Arrays.asList(bounded(me)), true, () -> 3, () -> true)
-                .values()
-                .stream()
-                .mapToLong(Long::longValue)
-                .sum());
-        assertEquals(0, me.stored);
+            0,
+            me.getProvider()
+                .getCachedAmount());
+    }
+
+    @Test
+    public void fullAndOverfullModeledMeDoNotInvalidateOtherOutputBuses() throws Exception {
+        if (delegated("fullAndOverfullModeledMeDoNotInvalidateOtherOutputBuses")) return;
+        for (long cached : new long[] { 1600, 50000 }) {
+            FakeBus me = modeledMe();
+            me.stored = cached;
+            MTEHatchOutputBus ordinary = new MTEHatchOutputBus(
+                "test_fallback",
+                1,
+                1,
+                new String[0],
+                new ITexture[0][][]);
+            Map<ItemIdentity, Long> items = Collections.singletonMap(id(ore), 64L);
+            assertEquals(
+                items,
+                NativeOutputTransactions
+                    .execute(items, Arrays.asList(nativePolicy(me), ordinary), true, () -> 1, () -> true));
+            assertEquals(
+                items,
+                NativeOutputTransactions
+                    .execute(items, Arrays.asList(nativePolicy(me), ordinary), false, () -> 1, () -> true));
+            assertEquals(64, ordinary.mInventory[0].stackSize);
+            assertEquals(cached, me.stored);
+        }
+    }
+
+    @Test
+    public void modeledMeBlockedPendingResumesOnlyItsRemainingLongQuantity() throws Exception {
+        if (delegated("modeledMeBlockedPendingResumesOnlyItsRemainingLongQuantity")) return;
+        FakeBus me = modeledMe();
+        Map<ItemIdentity, Long> items = Collections.singletonMap(id(ore), OutputLimits.TOTAL);
+        assertEquals(
+            items,
+            NativeOutputTransactions.execute(items, Arrays.asList(nativePolicy(me)), true, () -> 1, () -> true));
+        me.stores = 0;
+        me.stored = 50000;
+        PendingItemOutput pending = new PendingItemOutput();
+        pending.complete(items);
+        PendingOutputs.Sink<ItemIdentity> sink = offered -> NativeOutputTransactions
+            .execute(offered, Arrays.asList(nativePolicy(me)), false, () -> me.tick, () -> true);
+        assertEquals(0, pending.flush(1, sink));
+        assertEquals("", pending.fault());
+        assertEquals(items, pending.snapshot());
+        me.stored = 0; // Controlled recovery, not a real ME network drain.
+        me.tick = 2;
+        assertEquals(OutputLimits.TOTAL, pending.flush(2, sink));
+        assertFalse(pending.blocksStart());
+        assertEquals(OutputLimits.TOTAL, me.stored);
+        assertEquals(513, me.stores); // ceil(2^40 / Integer.MAX_VALUE), no per-item/64-stack expansion.
+    }
+
+    @Test
+    public void modeledSameTickContinuationStillCannotOverflowTheLongCounter() throws Exception {
+        if (delegated("modeledSameTickContinuationStillCannotOverflowTheLongCounter")) return;
+        FakeBus me = modeledMe();
+        Map<ItemIdentity, Long> one = Collections.singletonMap(id(ore), 1L);
+        assertEquals(
+            one,
+            NativeOutputTransactions.execute(one, Arrays.asList(nativePolicy(me)), false, () -> 1, () -> true));
+        me.stored = Long.MAX_VALUE - 10;
+        assertEquals(
+            Collections.singletonMap(id(ore), 10L),
+            NativeOutputTransactions.execute(
+                Collections.singletonMap(id(ore), 50L),
+                Arrays.asList(nativePolicy(me)),
+                false,
+                () -> 1,
+                () -> true));
+        assertEquals(Long.MAX_VALUE, me.stored);
+        assertTrue(
+            NativeOutputTransactions.execute(one, Arrays.asList(nativePolicy(me)), false, () -> 1, () -> true)
+                .isEmpty());
+        assertEquals(Long.MAX_VALUE, me.stored);
     }
 
     @Test
@@ -340,6 +461,9 @@ public final class NativeOutputTest {
         private boolean protectedOutput;
         private boolean falseReturn;
         private int maxOffer;
+        private boolean nativeAdmission, checkMode;
+        private long tick = 1, lastInputTick = Long.MIN_VALUE;
+        private int stores;
         private Runnable onStore = () -> {};
 
         private FakeBus(long capacity, boolean permissive) {
@@ -371,12 +495,17 @@ public final class NativeOutputTest {
             IOutputTransaction.IProtectOutputAware {
 
             private long accepted;
+            private final long initialSpace = capacity - stored;
 
             public IOutputBus getBus() {
                 return FakeBus.this;
             }
 
             public boolean hasAvailableSpace() {
+                if (nativeAdmission) {
+                    boolean allowAny = (!recipeCheck && tick == lastInputTick) || (!checkMode && initialSpace > 0);
+                    return allowAny || accepted < initialSpace;
+                }
                 return permissive || stored + accepted < capacity;
             }
 
@@ -390,8 +519,17 @@ public final class NativeOutputTest {
 
             public boolean storePartial(GTUtility.ItemId id, ItemStack stack, long total, long per) {
                 maxOffer = Math.max(maxOffer, stack.stackSize);
-                int amount = permissive ? stack.stackSize
-                    : (int) Math.min(stack.stackSize, capacity - stored - accepted);
+                stores++;
+                int amount;
+                if (nativeAdmission) {
+                    amount = !hasAvailableSpace() ? 0
+                        : recipeCheck && checkMode
+                            ? (int) Math.max(0, Math.min(stack.stackSize, initialSpace - accepted))
+                            : stack.stackSize;
+                } else {
+                    amount = permissive ? stack.stackSize
+                        : (int) Math.min(stack.stackSize, capacity - stored - accepted);
+                }
                 accepted += amount;
                 stack.stackSize -= amount;
                 onStore.run();
@@ -402,6 +540,7 @@ public final class NativeOutputTest {
 
             public void commit() {
                 stored += accepted;
+                if (nativeAdmission && accepted > 0) lastInputTick = tick;
                 commits++;
             }
         }

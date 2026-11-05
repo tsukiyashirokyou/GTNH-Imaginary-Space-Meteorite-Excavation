@@ -52,7 +52,7 @@ public final class PendingOutputsTest {
     }
 
     @Test
-    public void aTickHasOneSharedBoundedTransferAndNoPerItemLoop() {
+    public void aTickLimitsIdentitiesButOffersTheirFullLongQuantities() {
         PendingOutputs<String> pending = new PendingOutputs<>();
         Map<String, Long> many = new LinkedHashMap<>();
         for (int i = 0; i < OutputLimits.IDENTITIES; i++) many.put("item" + i, 1L << 29);
@@ -61,19 +61,28 @@ public final class PendingOutputsTest {
         PendingOutputs.Sink<String> sink = offered -> {
             calls.incrementAndGet();
             assertTrue(offered.size() <= OutputLimits.OFFERS_PER_TICK);
-            long total = 0;
             for (long count : offered.values()) {
-                assertTrue(count <= OutputLimits.OFFER_AMOUNT);
-                total += count;
+                assertEquals(1L << 29, count);
             }
-            assertTrue(total <= OutputLimits.ITEMS_PER_TICK);
             return offered;
         };
-        assertEquals(OutputLimits.ITEMS_PER_TICK, pending.flush(10, sink));
+        assertEquals(64L << 29, pending.flush(10, sink));
         assertEquals(0, pending.flush(10, sink));
         assertEquals(1, calls.get());
-        assertEquals(OutputLimits.ITEMS_PER_TICK, pending.flush(11, sink));
+        assertEquals(64L << 29, pending.flush(11, sink));
         assertEquals(2, calls.get());
+    }
+
+    @Test
+    public void aSingleIdentityCanTransferTheEntirePendingCapacityInOneTick() {
+        PendingOutputs<String> pending = new PendingOutputs<>();
+        pending.complete(one(OutputLimits.TOTAL));
+        assertEquals(OutputLimits.TOTAL, pending.flush(1, offered -> {
+            assertEquals(one(OutputLimits.TOTAL), offered);
+            return offered;
+        }));
+        assertFalse(pending.blocksStart());
+        assertEquals(0, pending.total());
     }
 
     @Test

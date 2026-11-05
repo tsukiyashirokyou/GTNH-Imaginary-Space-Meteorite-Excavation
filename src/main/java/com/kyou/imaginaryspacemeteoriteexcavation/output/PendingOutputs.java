@@ -51,14 +51,11 @@ public final class PendingOutputs<K> {
         lastTick = serverTick;
         List<K> keys = new ArrayList<>(remaining.keySet());
         LinkedHashMap<K, Long> offers = new LinkedHashMap<>();
-        int budget = OutputLimits.ITEMS_PER_TICK;
         int visited = 0;
         int start = cursor % keys.size();
-        while (visited < keys.size() && visited < OutputLimits.OFFERS_PER_TICK && budget > 0) {
+        while (visited < keys.size() && visited < OutputLimits.OFFERS_PER_TICK) {
             K key = keys.get((start + visited) % keys.size());
-            long amount = Math.min(remaining.get(key), Math.min(budget, OutputLimits.OFFER_AMOUNT));
-            offers.put(key, amount);
-            budget -= (int) amount;
+            offers.put(key, remaining.get(key));
             visited++;
         }
         // Rotate even when a type is blocked, so it cannot permanently starve other types.

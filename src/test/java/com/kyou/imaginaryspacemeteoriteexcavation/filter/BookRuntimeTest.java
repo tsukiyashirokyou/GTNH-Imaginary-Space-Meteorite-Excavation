@@ -295,7 +295,7 @@ public final class BookRuntimeTest {
         });
         PreparedProcess<ItemIdentity> process = planner.prepare(
             entry,
-            6,
+            12,
             () -> new BoundNetwork("owner", "orb", false),
             LocalStartResources.arrays(focus, fluid, drilling, () -> {}),
             noLp,

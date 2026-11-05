@@ -65,8 +65,8 @@ public final class MeteorEngineTest {
                 }
             }
             assertEquals(expected, MeteorGeometry.positions(radius));
-            assertFalse(MeteorGeometry.hasEnoughTowers(radius, 3 * (radius + 1) - 1));
-            assertTrue(MeteorGeometry.hasEnoughTowers(radius, 3 * (radius + 1)));
+            assertFalse(MeteorGeometry.hasEnoughTowers(radius, 6 * (radius + 1) - 1));
+            assertTrue(MeteorGeometry.hasEnoughTowers(radius, 6 * (radius + 1)));
             assertTrue(MeteorGeometry.hasEnoughTowers(radius, Integer.MAX_VALUE));
             assertFalse(MeteorGeometry.hasEnoughTowers(radius, -1));
         }
@@ -74,6 +74,34 @@ public final class MeteorEngineTest {
         assertEquals(143761, MeteorGeometry.positions(32));
         reject(IllegalArgumentException.class, () -> MeteorGeometry.positions(0));
         reject(IllegalArgumentException.class, () -> MeteorGeometry.positions(33));
+    }
+
+    @Test
+    public void diameterTowerRuleMatchesDirectFormulaAndDisplayBoundaries() {
+        for (int radius = 1; radius <= MeteorGeometry.MAX_STANDARD_RADIUS; radius++) {
+            for (int towers = 0; towers <= 205; towers++) {
+                boolean expected = 2L * radius + 1L <= towers / 3L - 1L;
+                assertEquals(expected, MeteorGeometry.hasEnoughTowers(radius, towers));
+                assertEquals(expected, radius <= MeteorGeometry.maxRadiusForTowers(towers));
+            }
+        }
+        assertEquals(12, MeteorGeometry.requiredTowers(1));
+        assertEquals(198, MeteorGeometry.requiredTowers(32));
+        assertEquals(0, MeteorGeometry.maxRadiusForTowers(11));
+        assertEquals(1, MeteorGeometry.maxRadiusForTowers(12));
+        assertEquals(31, MeteorGeometry.maxRadiusForTowers(197));
+        assertEquals(32, MeteorGeometry.maxRadiusForTowers(198));
+        assertEquals(32, MeteorGeometry.maxRadiusForTowers(199));
+        assertEquals(32, MeteorGeometry.maxRadiusForTowers(200));
+        assertEquals(357913940, MeteorGeometry.maxRadiusForTowers(Integer.MAX_VALUE));
+        assertEquals(2147483646L, MeteorGeometry.requiredTowers(357913940));
+        assertTrue(MeteorGeometry.requiredTowers(357913941) > Integer.MAX_VALUE);
+        assertEquals(12884901888L, MeteorGeometry.requiredTowers(Integer.MAX_VALUE));
+        assertEquals(0, MeteorGeometry.maxRadiusForTowers(-1));
+        assertEquals(0, MeteorGeometry.maxRadiusForTowers(Integer.MIN_VALUE));
+        reject(IllegalArgumentException.class, () -> MeteorGeometry.requiredTowers(-1));
+        reject(IllegalArgumentException.class, () -> MeteorGeometry.hasEnoughTowers(0, Integer.MAX_VALUE));
+        reject(IllegalArgumentException.class, () -> MeteorGeometry.hasEnoughTowers(33, Integer.MAX_VALUE));
     }
 
     @Test

@@ -1,11 +1,16 @@
 package com.kyou.imaginaryspacemeteoriteexcavation.processing;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
@@ -25,7 +30,7 @@ public final class ProcessPlannerTest {
         Memory memory = new Memory(10, 1000, 1000);
         MeteorProcessPlanner.Result<String> result = new MeteorProcessPlanner<String>(steps()).prepare(
             recipe(10),
-            5,
+            11,
             () -> { throw new AssertionError("orb read before tower check"); },
             focus -> { throw new AssertionError("resources read before tower check"); },
             memory,
@@ -230,7 +235,7 @@ public final class ProcessPlannerTest {
         Memory memory = new Memory(Integer.MAX_VALUE, Long.MAX_VALUE, 0);
         PreparedProcess<String> plan = new MeteorProcessPlanner<String>(maximal).prepare(
             recipe(0),
-            6,
+            12,
             () -> new BoundNetwork("owner", "orb", true),
             memory,
             memory,
@@ -264,11 +269,120 @@ public final class ProcessPlannerTest {
         } catch (ArithmeticException expected) {}
     }
 
+    @Test
+    public void pureCalculationsAreReusedWhileFinalOutputRemainsLive() {
+        Memory memory = new Memory(10, 1000, 1000);
+        AtomicInteger filters = new AtomicInteger();
+        List<Map<String, Long>> probes = new ArrayList<>();
+        boolean[] capacity = { true };
+        PreparedProcess<String> plan = prepare(memory, 10, false, item -> {
+            filters.incrementAndGet();
+            return true;
+        }, items -> {
+            probes.add(items);
+            return capacity[0];
+        }, () -> true).process;
+        assertEquals(3, plan.schedule().batch);
+        assertEquals(2, filters.get());
+        assertEquals(3, probes.size()); // Initial B=1, native first B=1, upper-bound B=3.
+        assertSame(probes.get(0), probes.get(1)); // Same immutable pure plan, fresh capacity call each time.
+        capacity[0] = false;
+        assertEquals(ProcessFailure.OUTPUT_FULL, plan.start());
+        assertEquals(4, probes.size());
+        assertEquals(2, filters.get());
+        assertEquals(0, memory.debits);
+        assertEquals(10, memory.focus);
+        assertEquals(1000, memory.fluid);
+    }
+
+    @Test
+    public void feasibleIntMaximumNeedsOneUpperBoundProbeAndStillRechecksBeforeDebit() {
+        ProcessingPorts.Scheduler maximal = (ticks, power, choose, advance) -> {
+            int batch = choose.applyAsInt(Integer.MAX_VALUE);
+            advance.accept(batch);
+            return ProcessingPorts.Schedule.success(batch, 1, 3072);
+        };
+        Memory memory = new Memory(Integer.MAX_VALUE, Long.MAX_VALUE, 0);
+        AtomicInteger probes = new AtomicInteger();
+        PreparedProcess<String> plan = new MeteorProcessPlanner<String>(maximal).prepare(
+            recipe(0),
+            12,
+            () -> new BoundNetwork("owner", "orb", true),
+            memory,
+            memory,
+            POWER,
+            item -> true,
+            items -> {
+                probes.incrementAndGet();
+                return true;
+            },
+            () -> true).process;
+        assertEquals(Integer.MAX_VALUE, plan.schedule().batch);
+        assertEquals(2, probes.get());
+        assertEquals(ProcessFailure.NONE, plan.start());
+        assertEquals(3, probes.get());
+        assertEquals(0, memory.focus);
+        long total = 8L * Integer.MAX_VALUE / 5 + 87L * Integer.MAX_VALUE / 5;
+        assertEquals(Long.MAX_VALUE - total, memory.fluid);
+    }
+
+    @Test
+    public void optimizedSearchMatchesExhaustiveRoundedResourceAndOutputLimits() {
+        ProcessingPorts.Scheduler upTo128 = (ticks, power, choose, advance) -> {
+            int first = choose.applyAsInt(1);
+            if (first == 0) return ProcessingPorts.Schedule.failure(ProcessFailure.INSUFFICIENT_INPUT);
+            advance.accept(first);
+            int extra = choose.applyAsInt(127);
+            advance.accept(extra);
+            return ProcessingPorts.Schedule.success(first + extra, 100, 3072);
+        };
+        for (int focus : new int[] { 1, 2, 3, 8, 127, 128 }) {
+            for (long balance : new long[] { 0, 7, 10, 20, 50, 1000 }) {
+                for (long fluid : new long[] { 0, 17, 18, 37, 55, 56, 200, 5000 }) {
+                    for (long output : new long[] { 0, 1, 3, 52, 255, Long.MAX_VALUE }) {
+                        for (boolean oresOnly : new boolean[] { false, true }) {
+                            int expected = 0;
+                            for (int b = 1; b <= Math.min(128, focus); b++) {
+                                long ore = 8L * b / 5, filler = 87L * b / 5;
+                                if (10L * b <= balance && ore + filler <= fluid
+                                    && ore + (oresOnly ? 0 : filler) <= output) expected = b;
+                            }
+                            Memory memory = new Memory(focus, fluid, balance);
+                            MeteorProcessPlanner.Result<String> result = new MeteorProcessPlanner<String>(upTo128)
+                                .prepare(
+                                    recipe(10),
+                                    12,
+                                    () -> new BoundNetwork("owner", "orb", false),
+                                    memory,
+                                    memory,
+                                    POWER,
+                                    item -> !oresOnly || "ore".equals(item),
+                                    items -> items.values()
+                                        .stream()
+                                        .mapToLong(Long::longValue)
+                                        .sum() <= output,
+                                    () -> true);
+                            if (expected == 0) {
+                                assertTrue(result.failure != ProcessFailure.NONE);
+                            } else {
+                                assertEquals(expected, result.process.schedule().batch);
+                                assertEquals(ProcessFailure.NONE, result.process.start());
+                                assertEquals(focus - expected, memory.focus);
+                                assertEquals(balance - 10L * expected, memory.lp);
+                                assertEquals(fluid - 8L * expected / 5 - 87L * expected / 5, memory.fluid);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private static MeteorProcessPlanner.Result<String> prepare(Memory memory, int cost, boolean free,
         Predicate<String> keep, ProcessingPorts.OutputGate<String> output, BooleanSupplier guard) {
         return new MeteorProcessPlanner<String>(steps()).prepare(
             recipe(cost),
-            6,
+            12,
             () -> new BoundNetwork("owner", "orb", free),
             memory,
             memory,

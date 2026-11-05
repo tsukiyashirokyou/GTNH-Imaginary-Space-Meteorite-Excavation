@@ -6,13 +6,17 @@ import com.cleanroommc.modularui.api.drawable.IKey;
 import com.cleanroommc.modularui.factory.PosGuiData;
 import com.cleanroommc.modularui.screen.ModularPanel;
 import com.cleanroommc.modularui.screen.UISettings;
+import com.cleanroommc.modularui.value.sync.BooleanSyncValue;
 import com.cleanroommc.modularui.value.sync.IntSyncValue;
+import com.cleanroommc.modularui.value.sync.LongSyncValue;
 import com.cleanroommc.modularui.value.sync.PanelSyncManager;
 import com.cleanroommc.modularui.value.sync.StringSyncValue;
+import com.cleanroommc.modularui.widgets.TextWidget;
 import com.cleanroommc.modularui.widgets.layout.Flow;
 import com.cleanroommc.modularui.widgets.slot.ItemSlot;
 import com.kyou.imaginaryspacemeteoriteexcavation.inventory.MachineItems;
 import com.kyou.imaginaryspacemeteoriteexcavation.machine.MeteoriteExcavation;
+import com.kyou.imaginaryspacemeteoriteexcavation.meteor.MeteorGeometry;
 
 import gregtech.common.gui.modularui.multiblock.base.MTEMultiBlockBaseGui;
 
@@ -22,6 +26,11 @@ public final class ExcavationGui extends MTEMultiBlockBaseGui<MeteoriteExcavatio
     private StringSyncValue orbOwner;
     private IntSyncValue normalEnergy;
     private IntSyncValue multiEnergy;
+    private StringSyncValue state, recipe, outputPreview;
+    private StringSyncValue diagnostic;
+    private LongSyncValue balance, kept, voided, drilling, pending;
+    private IntSyncValue batch, progress, duration;
+    private BooleanSyncValue freeOrb;
 
     public ExcavationGui(MeteoriteExcavation machine) {
         super(machine);
@@ -35,7 +44,17 @@ public final class ExcavationGui extends MTEMultiBlockBaseGui<MeteoriteExcavatio
 
     @Override
     protected int getBasePanelHeight() {
-        return 278;
+        return 310;
+    }
+
+    @Override
+    protected int getBasePanelWidth() {
+        return 344;
+    }
+
+    @Override
+    protected int getTerminalRowWidth() {
+        return 336;
     }
 
     @Override
@@ -51,6 +70,32 @@ public final class ExcavationGui extends MTEMultiBlockBaseGui<MeteoriteExcavatio
         syncManager.syncValue("isme.owner", orbOwner);
         syncManager.syncValue("isme.normalEnergy", normalEnergy);
         syncManager.syncValue("isme.multiEnergy", multiEnergy);
+        state = new StringSyncValue(multiblock::runtimeState);
+        diagnostic = new StringSyncValue(multiblock::runtimeDiagnostic);
+        syncManager.syncValue("isme.diagnostic", diagnostic);
+        recipe = new StringSyncValue(multiblock::currentRecipe);
+        outputPreview = new StringSyncValue(multiblock::outputSummary);
+        balance = new LongSyncValue(multiblock::lastLpBalance);
+        kept = new LongSyncValue(multiblock::retainedCount);
+        voided = new LongSyncValue(multiblock::voidedCount);
+        drilling = new LongSyncValue(multiblock::drillingCount);
+        pending = new LongSyncValue(multiblock::pendingCount);
+        batch = new IntSyncValue(multiblock::currentBatch);
+        progress = new IntSyncValue(multiblock::progressTicks);
+        duration = new IntSyncValue(multiblock::durationTicks);
+        freeOrb = new BooleanSyncValue(multiblock::hasFreeOrb);
+        syncManager.syncValue("isme.state", state);
+        syncManager.syncValue("isme.recipe", recipe);
+        syncManager.syncValue("isme.preview", outputPreview);
+        syncManager.syncValue("isme.lp", balance);
+        syncManager.syncValue("isme.kept", kept);
+        syncManager.syncValue("isme.voided", voided);
+        syncManager.syncValue("isme.drilling", drilling);
+        syncManager.syncValue("isme.pending", pending);
+        syncManager.syncValue("isme.batch", batch);
+        syncManager.syncValue("isme.progress", progress);
+        syncManager.syncValue("isme.duration", duration);
+        syncManager.syncValue("isme.free", freeOrb);
     }
 
     @Override
@@ -97,45 +142,102 @@ public final class ExcavationGui extends MTEMultiBlockBaseGui<MeteoriteExcavatio
                             .child(
                                 new ItemSlot()
                                     .slot(new ExcavationContainer.TowerSlot(multiblock).singletonSlotGroup()))))
+            .child(statusColumns())
             .child(
-                IKey.dynamic(
-                    () -> towerCount.getIntValue() == 0 ? StatCollector.translateToLocal("isme.gui.missing_pylons")
-                        : StatCollector.translateToLocalFormatted("isme.gui.tower_count", towerCount.getIntValue()))
-                    .asWidget()
-                    .height(12)
-                    .fullWidth())
-            .child(
-                IKey.dynamic(
-                    () -> StatCollector.translateToLocalFormatted(
-                        "isme.gui.radius",
-                        towerCount.getIntValue() < 6 ? StatCollector.translateToLocal("isme.gui.none")
-                            : Integer.toString(towerCount.getIntValue() / 3 - 1)))
-                    .asWidget()
-                    .height(12)
-                    .fullWidth())
-            .child(
-                IKey.dynamic(
-                    () -> orbOwner.getStringValue()
-                        .isEmpty() ? StatCollector.translateToLocal("isme.gui.missing_orb")
-                            : StatCollector.translateToLocalFormatted("isme.gui.owner", orbOwner.getStringValue()))
-                    .asWidget()
-                    .height(12)
-                    .fullWidth())
-            .child(
-                IKey.dynamic(
-                    () -> StatCollector.translateToLocalFormatted(
-                        "isme.gui.energy",
-                        normalEnergy.getIntValue(),
-                        multiEnergy.getIntValue()))
-                    .asWidget()
-                    .height(12)
-                    .fullWidth())
-            .child(
-                IKey.lang("isme.gui.foundation")
-                    .asWidget()
-                    .height(12)
-                    .fullWidth())
+                line(
+                    IKey.dynamic(
+                        () -> pending.getLongValue() < 0 ? StatCollector.translateToLocal("isme.gui.pending_unknown")
+                            : StatCollector.translateToLocalFormatted("isme.gui.pending", pending.getLongValue())))
+                                .tooltipBuilder(t -> t.add(outputPreview.getStringValue()))
+                                .tooltipAutoUpdate(true))
             .child(createInventoryRow(panel, syncManager));
+    }
+
+    private Flow statusColumns() {
+        Flow left = Flow.column()
+            .width(166)
+            .height(72)
+            .child(
+                line(
+                    IKey.dynamic(
+                        () -> StatCollector
+                            .translateToLocalFormatted("isme.gui.tower_count", towerCount.getIntValue()))))
+            .child(
+                line(
+                    IKey.dynamic(
+                        () -> StatCollector.translateToLocalFormatted(
+                            "isme.gui.radius",
+                            MeteorGeometry.maxRadiusForTowers(towerCount.getIntValue()) == 0
+                                ? StatCollector.translateToLocal("isme.gui.none")
+                                : Integer.toString(MeteorGeometry.maxRadiusForTowers(towerCount.getIntValue()))))))
+            .child(
+                line(
+                    IKey.dynamic(
+                        () -> orbOwner.getStringValue()
+                            .isEmpty()
+                                ? StatCollector.translateToLocal("isme.gui.missing_orb")
+                                : StatCollector
+                                    .translateToLocalFormatted("isme.gui.owner", orbOwner.getStringValue()))))
+            .child(
+                line(
+                    IKey.dynamic(
+                        () -> freeOrb.getBoolValue() ? StatCollector.translateToLocal("isme.gui.free_lp")
+                            : balance.getLongValue() < 0 ? StatCollector.translateToLocal("isme.gui.lp_unchecked")
+                                : StatCollector.translateToLocalFormatted("isme.gui.lp", balance.getLongValue()))))
+            .child(
+                line(
+                    IKey.dynamic(
+                        () -> StatCollector.translateToLocalFormatted(
+                            "isme.gui.energy",
+                            normalEnergy.getIntValue(),
+                            multiEnergy.getIntValue()))))
+            .child(
+                line(IKey.dynamic(() -> StatCollector.translateToLocal("isme.state." + state.getStringValue())))
+                    .tooltipBuilder(t -> t.add(diagnostic.getStringValue()))
+                    .tooltipAutoUpdate(true));
+        Flow right = Flow.column()
+            .width(166)
+            .height(72)
+            .child(
+                line(IKey.dynamic(() -> StatCollector.translateToLocalFormatted("isme.gui.recipe", shortRecipe())))
+                    .tooltipBuilder(t -> t.add(recipe.getStringValue()))
+                    .tooltipAutoUpdate(true))
+            .child(
+                line(
+                    IKey.dynamic(() -> StatCollector.translateToLocalFormatted("isme.gui.batch", batch.getIntValue()))))
+            .child(
+                line(
+                    IKey.dynamic(
+                        () -> StatCollector.translateToLocalFormatted(
+                            "isme.gui.progress",
+                            progress.getIntValue(),
+                            duration.getIntValue()))))
+            .child(
+                line(IKey.dynamic(() -> StatCollector.translateToLocalFormatted("isme.gui.kept", kept.getLongValue()))))
+            .child(
+                line(
+                    IKey.dynamic(
+                        () -> StatCollector.translateToLocalFormatted("isme.gui.voided", voided.getLongValue()))))
+            .child(
+                line(
+                    IKey.dynamic(
+                        () -> StatCollector.translateToLocalFormatted("isme.gui.drilling", drilling.getLongValue()))));
+        return Flow.row()
+            .fullWidth()
+            .height(72)
+            .child(left)
+            .child(right);
+    }
+
+    private String shortRecipe() {
+        String value = recipe.getStringValue();
+        return value.length() > 20 ? value.substring(0, 17) + "..." : value;
+    }
+
+    private static TextWidget<?> line(IKey key) {
+        return key.asWidget()
+            .height(12)
+            .fullWidth();
     }
 
     @Override

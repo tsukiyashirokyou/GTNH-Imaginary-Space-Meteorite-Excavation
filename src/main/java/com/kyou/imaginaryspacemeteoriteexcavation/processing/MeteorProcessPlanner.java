@@ -1,5 +1,7 @@
 package com.kyou.imaginaryspacemeteoriteexcavation.processing;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -68,14 +70,14 @@ public final class MeteorProcessPlanner<K> {
             return Result.failure(ProcessFailure.OVERFLOW);
         }
         if (schedule.failure != ProcessFailure.NONE) return Result.failure(schedule.failure);
-        if (candidate.planned != schedule.batch || !candidate.fits(schedule.batch)) {
+        Calculation calculation = candidate.calculation(schedule.batch);
+        if (candidate.planned != schedule.batch || calculation.failure != ProcessFailure.NONE) {
             return Result.failure(
-                candidate.failure == ProcessFailure.NONE ? ProcessFailure.CONDITIONS_CHANGED : candidate.failure);
+                calculation.failure == ProcessFailure.NONE ? ProcessFailure.CONDITIONS_CHANGED : calculation.failure);
         }
-        BatchYield<K> yield = recipe.recipe()
-            .yield()
-            .forBatch(schedule.batch);
-        Map<K, Long> retained = retained(yield, keep);
+        // No live capacity result is cached. PreparedProcess.start() performs the final fresh preflight,
+        // after the native post-checks and immediately before charging resources.
+        BatchYield<K> yield = calculation.yield;
         int totalLp = Math.toIntExact(Math.multiplyExact((long) cost, schedule.batch));
         ProcessingPorts.Debit debit = snapshot.prepareDebit(schedule.batch, yield.prefilterTotal());
         return Result.success(
@@ -83,7 +85,7 @@ public final class MeteorProcessPlanner<K> {
                 recipe,
                 network,
                 yield,
-                retained,
+                calculation.retained,
                 schedule,
                 totalLp,
                 debit,
@@ -92,13 +94,17 @@ public final class MeteorProcessPlanner<K> {
                 conditionsUnchanged));
     }
 
-    private Map<K, Long> retained(BatchYield<K> yield, Predicate<K> keep) {
-        Map<K, Long> items = new LinkedHashMap<>();
-        for (Map.Entry<K, Long> entry : yield.quantities()
-            .entrySet()) {
-            if (keep.test(entry.getKey())) items.put(entry.getKey(), entry.getValue());
+    private final class Calculation {
+
+        private final BatchYield<K> yield;
+        private final Map<K, Long> retained;
+        private final ProcessFailure failure;
+
+        private Calculation(BatchYield<K> yield, Map<K, Long> retained, ProcessFailure failure) {
+            this.yield = yield;
+            this.retained = retained;
+            this.failure = failure;
         }
-        return items;
     }
 
     private final class Candidate {
@@ -108,6 +114,9 @@ public final class MeteorProcessPlanner<K> {
         private final long countLimit;
         private final Predicate<K> keep;
         private final ProcessingPorts.OutputGate<K> output;
+        // Owned only by this prepare() call. Never memoize a live output/inventory decision here.
+        private final Map<Integer, Calculation> calculations = new LinkedHashMap<>();
+        private final Map<K, Boolean> filters = new HashMap<>();
         private int planned;
         private long plannedLiters;
         private ProcessFailure failure = ProcessFailure.NONE;
@@ -121,10 +130,21 @@ public final class MeteorProcessPlanner<K> {
             this.output = output;
         }
 
-        private boolean fits(int total) {
+        private Calculation calculation(int total) {
+            Calculation cached = calculations.get(total);
+            if (cached != null) return cached;
+            Calculation result = calculate(total);
+            if (calculations.size() >= 64) calculations.remove(
+                calculations.keySet()
+                    .iterator()
+                    .next());
+            calculations.put(total, result);
+            return result;
+        }
+
+        private Calculation calculate(int total) {
             if (total <= 0 || total > countLimit) {
-                failure = ProcessFailure.INSUFFICIENT_INPUT;
-                return false;
+                return new Calculation(null, Collections.emptyMap(), ProcessFailure.INSUFFICIENT_INPUT);
             }
             BatchYield<K> yield;
             try {
@@ -132,14 +152,31 @@ public final class MeteorProcessPlanner<K> {
                     .yield()
                     .forBatch(total);
             } catch (ArithmeticException overflow) {
-                failure = ProcessFailure.OVERFLOW;
-                return false;
+                return new Calculation(null, Collections.emptyMap(), ProcessFailure.OVERFLOW);
             }
             if (yield.prefilterTotal() > snapshot.drillingLiters()) {
-                failure = ProcessFailure.INSUFFICIENT_DRILLING_FLUID;
+                return new Calculation(yield, Collections.emptyMap(), ProcessFailure.INSUFFICIENT_DRILLING_FLUID);
+            }
+            Map<K, Long> retained = new LinkedHashMap<>();
+            for (Map.Entry<K, Long> entry : yield.quantities()
+                .entrySet()) {
+                Boolean decision = filters.get(entry.getKey());
+                if (decision == null) {
+                    decision = keep.test(entry.getKey());
+                    filters.put(entry.getKey(), decision);
+                }
+                if (decision) retained.put(entry.getKey(), entry.getValue());
+            }
+            return new Calculation(yield, Collections.unmodifiableMap(retained), ProcessFailure.NONE);
+        }
+
+        private boolean fits(int total) {
+            Calculation calculation = calculation(total);
+            if (calculation.failure != ProcessFailure.NONE) {
+                failure = calculation.failure;
                 return false;
             }
-            if (!output.canAccept(retained(yield, keep))) {
+            if (!output.canAccept(calculation.retained)) {
                 failure = ProcessFailure.OUTPUT_FULL;
                 return false;
             }
@@ -150,6 +187,10 @@ public final class MeteorProcessPlanner<K> {
         private int maximumIncrement(int requested) {
             int low = 0;
             int high = (int) Math.max(0, Math.min((long) requested, countLimit - planned));
+            // Native ME often admits the entire request. Probe the upper bound first instead of building
+            // log2(requested) fresh native transactions on that common path.
+            if (high > 0 && fits(Math.addExact(planned, high))) return high;
+            if (high > 0) high--;
             while (low < high) {
                 int middle = low + (int) (((long) high - low + 1) / 2);
                 if (fits(Math.addExact(planned, middle))) low = middle;
@@ -162,11 +203,10 @@ public final class MeteorProcessPlanner<K> {
             if (amount < 0) throw new IllegalArgumentException("Negative native increment");
             if (amount == 0) return;
             int total = Math.addExact(planned, amount);
-            if (!fits(total)) throw new IllegalStateException("Native selected an infeasible candidate");
-            long liters = recipe.recipe()
-                .yield()
-                .forBatch(total)
-                .prefilterTotal();
+            Calculation calculation = calculation(total);
+            if (calculation.failure != ProcessFailure.NONE)
+                throw new IllegalStateException("Native selected an infeasible candidate");
+            long liters = calculation.yield.prefilterTotal();
             long increment = Math.subtractExact(liters, plannedLiters);
             if (increment < 0 || increment > snapshot.drillingLiters() - plannedLiters) {
                 throw new IllegalStateException("Invalid nonlinear drilling increment");

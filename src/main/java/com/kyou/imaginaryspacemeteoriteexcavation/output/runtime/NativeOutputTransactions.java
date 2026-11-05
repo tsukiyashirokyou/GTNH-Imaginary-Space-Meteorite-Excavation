@@ -37,6 +37,8 @@ final class NativeOutputTransactions {
             long remaining = items.get(id);
             long inserted = 0;
             while (remaining > 0) {
+                // ItemStack/ejectStack use int counts. Keep all fragments in this one transaction so native ME
+                // admission is not rechecked between fragments; this is an API boundary, not a per-tick throttle.
                 int amount = (int) Math.min(Integer.MAX_VALUE, remaining);
                 ItemStack part = id.template();
                 part.stackSize = amount;

@@ -11,16 +11,16 @@ import gregtech.api.interfaces.IOutputBusTransaction;
 import gregtech.api.interfaces.IOutputTransaction;
 import gregtech.api.util.GTUtility;
 
-/** Composition only: preserve native allocation/filtering, cap the ME transaction's permissive input policy. */
+/** Preserve native admission/filtering; the extra bound guards numeric headroom, not ME physical space. */
 final class BoundedOutputBus implements IOutputBus {
 
     private final IOutputBus bus;
-    private final LongSupplier physicalSpace;
+    private final LongSupplier headroom;
     private final BooleanSupplier safe;
 
-    BoundedOutputBus(IOutputBus bus, LongSupplier physicalSpace, BooleanSupplier safe) {
+    BoundedOutputBus(IOutputBus bus, LongSupplier headroom, BooleanSupplier safe) {
         this.bus = bus;
-        this.physicalSpace = physicalSpace;
+        this.headroom = headroom;
         this.safe = safe;
     }
 
@@ -60,7 +60,7 @@ final class BoundedOutputBus implements IOutputBus {
 
         private Transaction(IOutputBusTransaction delegate) {
             this.delegate = delegate;
-            capacity = Math.max(0, physicalSpace.getAsLong());
+            capacity = Math.max(0, headroom.getAsLong());
         }
 
         @Override
@@ -114,7 +114,7 @@ final class BoundedOutputBus implements IOutputBus {
 
         @Override
         public void commit() {
-            if (!active || !safe.getAsBoolean() || physicalSpace.getAsLong() < used) {
+            if (!active || !safe.getAsBoolean() || headroom.getAsLong() < used) {
                 throw new IllegalStateException("Output destination changed before commit");
             }
             delegate.commit();

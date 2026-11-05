@@ -1,17 +1,15 @@
 package com.kyou.imaginaryspacemeteoriteexcavation.output.runtime;
 
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.CompressedStreamTools;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
 
+import com.kyou.imaginaryspacemeteoriteexcavation.meteor.runtime.BoundedNbtSize;
 import com.kyou.imaginaryspacemeteoriteexcavation.meteor.runtime.ItemIdentity;
 import com.kyou.imaginaryspacemeteoriteexcavation.output.OutputLimits;
 import com.kyou.imaginaryspacemeteoriteexcavation.output.PendingOutputs;
@@ -21,6 +19,10 @@ import cpw.mods.fml.common.registry.GameRegistry;
 /** Versioned, bounded persistence; invalid records are quarantined and saved unchanged. */
 public final class PendingItemOutput {
 
+    // A named root adds one type byte and a two-byte empty name; list children omit these three bytes.
+    private static final int ROOT_HEADER_BYTES = 3;
+    private static final int EMPTY_BYTES = BoundedNbtSize
+        .measure(encode(Collections.emptyMap(), 0, ""), OutputLimits.SERIALIZED_BYTES);
     private PendingOutputs<ItemIdentity> pending = new PendingOutputs<>();
     private NBTTagCompound quarantine;
     private String invalidReason = "";
@@ -52,6 +54,10 @@ public final class PendingItemOutput {
 
     public long revision() {
         return pending.revision();
+    }
+
+    public long total() {
+        return pending.total();
     }
 
     public NBTTagCompound save() {
@@ -105,10 +111,15 @@ public final class PendingItemOutput {
 
     private static boolean encodable(Map<ItemIdentity, Long> items) {
         try {
+            long bytes = EMPTY_BYTES;
             for (Map.Entry<ItemIdentity, Long> entry : items.entrySet()) {
-                if (!within(encodeItem(entry.getKey(), entry.getValue()), OutputLimits.IDENTITY_BYTES)) return false;
+                int size = entry.getKey()
+                    .savedSize(OutputLimits.IDENTITY_BYTES);
+                if (size > OutputLimits.IDENTITY_BYTES) return false;
+                bytes += size - ROOT_HEADER_BYTES;
+                if (bytes > OutputLimits.SERIALIZED_BYTES - 512) return false;
             }
-            return within(encode(items, 0, ""), OutputLimits.SERIALIZED_BYTES - 512);
+            return bytes <= OutputLimits.SERIALIZED_BYTES - 512;
         } catch (RuntimeException invalid) {
             return false;
         }
@@ -127,41 +138,10 @@ public final class PendingItemOutput {
     }
 
     private static NBTTagCompound encodeItem(ItemIdentity id, long amount) {
-        ItemStack sample = id.template();
-        NBTTagCompound entry = new NBTTagCompound();
-        entry.setString(
-            "registry",
-            GameRegistry.findUniqueIdentifierFor(sample.getItem())
-                .toString());
-        entry.setInteger("damage", sample.getItemDamage());
-        entry.setLong("amount", amount);
-        if (sample.hasTagCompound()) entry.setTag(
-            "tag",
-            sample.getTagCompound()
-                .copy());
-        return entry;
+        return id.save(amount);
     }
 
     private static boolean within(NBTTagCompound tag, int limit) {
-        try {
-            CompressedStreamTools.write(tag, new DataOutputStream(new OutputStream() {
-
-                private int count;
-
-                @Override
-                public void write(int value) throws IOException {
-                    if (++count > limit) throw new IOException("Output NBT exceeds bound");
-                }
-
-                @Override
-                public void write(byte[] bytes, int offset, int length) throws IOException {
-                    if (length > limit - count) throw new IOException("Output NBT exceeds bound");
-                    count += length;
-                }
-            }));
-            return true;
-        } catch (IOException oversized) {
-            return false;
-        }
+        return BoundedNbtSize.measure(tag, limit) <= limit;
     }
 }
