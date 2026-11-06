@@ -191,15 +191,17 @@ public final class BookRuntimeTest {
     }
 
     @Test
-    public void singleBookSessionRejectsStaleRevisionReplacementCountAndForeignNbt() throws Exception {
-        if (delegated("singleBookSessionRejectsStaleRevisionReplacementCountAndForeignNbt")) return;
+    public void singleBookSessionRejectsStaleRevisionChangedContentsCountAndForeignNbt() throws Exception {
+        if (delegated("singleBookSessionRejectsStaleRevisionChangedContentsCountAndForeignNbt")) return;
         ItemStack[] cell = { books.defaults(1) };
         FilterBookSession session = new FilterBookSession(books, () -> cell[0], value -> cell[0] = value);
         assertTrue(session.edit(0, definition(), 0, "ore"));
         assertFalse(session.edit(0, definition(), 0, "filler"));
         assertTrue(session.edit(1, definition(), 1, null));
         cell[0] = cell[0].copy();
-        assertFalse(session.edit(2, definition(), 2, null));
+        assertTrue(session.edit(2, definition(), 2, null));
+        cell[0] = books.defaults(1);
+        assertFalse(session.edit(3, definition(), 0, "ore"));
         cell[0] = books.defaults(2);
         FilterBookSession stack = new FilterBookSession(books, () -> cell[0], value -> cell[0] = value);
         assertFalse(stack.edit(0, definition(), 0, "ore"));
@@ -209,6 +211,78 @@ public final class BookRuntimeTest {
         cell[0].getTagCompound()
             .setString("foreign", "changed");
         assertFalse(nbt.edit(0, definition(), 0, "ore"));
+    }
+
+    @Test
+    public void vanillaHeldStackCopiesKeepBookPagesEditableAndResettable() throws Exception {
+        if (delegated("vanillaHeldStackCopiesKeepBookPagesEditableAndResettable")) return;
+        ItemStack[] inventory = { books.defaults(1), configured() };
+        ItemStack otherSlot = inventory[1];
+        ItemStack otherBefore = otherSlot.copy();
+        FilterBookSession session = new FilterBookSession(books, () -> inventory[0], value -> inventory[0] = value);
+        assertTrue(session.unchanged());
+        // NetHandlerPlayServer.processPlayerBlockPlacement performs this after onItemRightClick opens the UI.
+        ItemStack opened = inventory[0];
+        inventory[0] = ItemStack.copyItemStack(inventory[0]);
+        assertNotSame(opened, inventory[0]);
+        assertTrue(session.unchanged());
+        assertEquals(
+            0,
+            session.state()
+                .revision());
+        assertTrue(
+            session.state()
+                .page(definition())
+                .keeps("ore"));
+        assertTrue(session.edit(0, definition(), 0, "ore"));
+        assertFalse(
+            books.read(inventory[0])
+                .page(definition())
+                .keeps("ore"));
+        ItemStack edited = inventory[0];
+        inventory[0] = ItemStack.copyItemStack(edited);
+        assertTrue(session.unchanged());
+        assertTrue(session.edit(1, definition(), 1, null));
+        assertEquals(
+            FilterPage.Mode.BLACKLIST,
+            books.read(inventory[0])
+                .page(definition())
+                .mode());
+        assertFalse(session.edit(1, definition(), 2, null));
+        inventory[0] = ItemStack.copyItemStack(inventory[0]);
+        assertTrue(session.edit(2, definition(), 2, null));
+        assertEquals(
+            3,
+            books.read(inventory[0])
+                .revision());
+        assertEquals(
+            FilterPage.Mode.WHITELIST,
+            books.read(inventory[0])
+                .page(definition())
+                .mode());
+        assertTrue(
+            books.read(inventory[0])
+                .page(definition())
+                .keeps("ore"));
+        assertTrue(
+            books.read(inventory[0])
+                .page(definition())
+                .keeps("filler"));
+        assertFalse(
+            books.read(edited)
+                .page(definition())
+                .keeps("ore"));
+        assertSame(otherSlot, inventory[1]);
+        assertTrue(ItemStack.areItemStacksEqual(otherBefore, otherSlot));
+        inventory[0] = ItemStack.copyItemStack(inventory[0]);
+        FilterBookSession reopened = new FilterBookSession(books, () -> inventory[0], value -> inventory[0] = value);
+        assertTrue(reopened.unchanged());
+        assertEquals(
+            3,
+            reopened.state()
+                .revision());
+        inventory[0] = new ItemStack(book, 1, 1);
+        assertFalse(reopened.edit(3, definition(), 0, "ore"));
     }
 
     @Test

@@ -8,7 +8,7 @@ import net.minecraft.item.ItemStack;
 import com.kyou.imaginaryspacemeteoriteexcavation.filter.FilterBookState;
 import com.kyou.imaginaryspacemeteoriteexcavation.filter.FilterDefinition;
 
-/** Server-owned edit session: same inventory object, full NBT and revision, then copy-on-write. */
+/** Server-owned edit session: anchored inventory slot, full item value and revision, then copy-on-write. */
 public final class FilterBookSession {
 
     private final FilterBookStore store;
@@ -34,9 +34,12 @@ public final class FilterBookSession {
     }
 
     public boolean unchanged() {
-        return valid && get.get() == reference
-            && reference.stackSize == 1
-            && ItemStack.areItemStacksEqual(reference, expected);
+        ItemStack current = get.get();
+        // Vanilla's right-click packet replaces the held stack with an equal copy after opening the GUI.
+        if (!valid || current == null || current.stackSize != 1 || !ItemStack.areItemStacksEqual(current, expected))
+            return false;
+        reference = current;
+        return true;
     }
 
     public FilterBookState state() {
