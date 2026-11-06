@@ -76,7 +76,7 @@ public final class Registration {
                 new ItemStack(ModBlocks.blockMasterStone),
                 component,
                 new ItemStack(ModBlocks.ritualStone, 64),
-                ItemList.OreDrill4.get(1L),
+                ItemList.OreDrill2.get(1L),
                 new ItemStack(ModBlocks.ritualStone, 64),
                 pipe.copy(),
                 plane,

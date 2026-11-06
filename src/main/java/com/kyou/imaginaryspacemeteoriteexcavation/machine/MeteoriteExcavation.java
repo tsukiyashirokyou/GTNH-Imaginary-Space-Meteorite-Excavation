@@ -91,7 +91,7 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
     implements ISurvivalConstructable, ICasingTextureProvider {
 
     private static final String MAIN = "main";
-    private static final int CASING_TEXTURE = 62;
+    private static final int CASING_TEXTURE = 50;
     private static final ItemStack[] COMPLETION_TRIGGER = new ItemStack[0];
     private static IStructureDefinition<MeteoriteExcavation> structure;
     private final MachineItems items = new MachineItems(this::inventoryChanged);
@@ -157,7 +157,7 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
     @Override
     public IStructureDefinition<MeteoriteExcavation> getStructureDefinition() {
         if (structure == null) {
-            ItemStack casing = ItemList.Casing_MiningOsmiridium.get(1);
+            ItemStack casing = ItemList.Casing_StableTitanium.get(1);
             structure = StructureDefinition.<MeteoriteExcavation>builder()
                 .addShape(
                     MAIN,
@@ -165,15 +165,15 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
                         new String[][] { { "   ", " f ", "   " }, { "   ", " f ", "   " }, { "   ", " f ", "   " },
                             { " f ", "fcf", " f " }, { " f ", "fcf", " f " }, { " f ", "fcf", " f " },
                             { "b~b", "bbb", "bbb" } }))
-                .addElement('f', ofFrame(Materials.Osmiridium))
-                .addElement('c', ofBlock(ItemList.Casing_MiningOsmiridium.getBlock(), casing.getItemDamage()))
+                .addElement('f', ofFrame(Materials.Titanium))
+                .addElement('c', ofBlock(ItemList.Casing_StableTitanium.getBlock(), casing.getItemDamage()))
                 .addElement(
                     'b',
                     buildHatchAdder(MeteoriteExcavation.class)
                         .atLeast(InputBus, InputHatch, OutputBus, Maintenance, Energy.or(MultiAmpEnergy))
                         .casingIndex(CASING_TEXTURE)
                         .hint(1)
-                        .buildAndChain(ItemList.Casing_MiningOsmiridium.getBlock(), casing.getItemDamage()))
+                        .buildAndChain(ItemList.Casing_StableTitanium.getBlock(), casing.getItemDamage()))
                 .build();
         }
         return structure;
@@ -218,8 +218,8 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
             .addInfo("Multiple normal energy hatches OR one multi-amp hatch. No mixing or lasers.")
             .beginStructureBlock(3, 7, 3, false)
             .addController("Bottom front center")
-            .addCasing("3", "Mining Osmiridium Casing", false)
-            .addStructureInfo("15 Osmiridium frames; 8 bottom positions accept casing or required hatches.")
+            .addCasing("3", "Stable Titanium Machine Casing", false)
+            .addStructureInfo("15 Titanium frames; 8 bottom positions accept casing or required hatches.")
             .addInputBus("1+", "Bottom layer", 1)
             .addInputHatch("1+", "Bottom layer", 1)
             .addOutputBus("1+", "Bottom layer", 1)

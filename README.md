@@ -23,7 +23,9 @@ Java 源码位于 `src/main/java/com/kyou/imaginaryspacemeteoriteexcavation/`；
 
 阶段 2 至 7 已完成控制器接线、开工扣费、原生耗能、完工输出、暂停和正常持久化；后续 ME 适配、[规划优化/WAILA](docs/OPTIMIZATION_WAILA.md)、[空间塔公式调整](docs/TOWER_RADIUS_RULE.md)、[现代 Java 构建](docs/MODERN_JAVA_BUILD.md)及[原生 debug 仓体兼容](docs/DEBUG_HATCH_COMPATIBILITY.md)也已完成。完整构建通过，100 项测试在 Java 8/17/21/25 通过。过滤书右键单本编辑，复制出的两本需先拆分。
 
-2026-11-06 [过滤书 GUI 修复](docs/FILTER_BOOK_GUI_FIX.md)：修复右键后仪式和产物消失、重置无效的问题，保留原书配置。最新修复包为 `0.1.0-beta1-fix1`，完整构建和 101 项测试通过；跨 JVM 和成品结果见报告。用户已开始游戏验收，F-01 修复后待复测，其余项目未验证。
+2026-11-06 [过滤书 GUI 修复](docs/FILTER_BOOK_GUI_FIX.md)：修复右键后仪式和产物消失、重置无效的问题，保留原书配置。该次修复包为 `0.1.0-beta1-fix1`，完整构建和 101 项测试通过；跨 JVM 和成品结果见报告。用户已开始游戏验收，F-01 修复后待复测，其余项目未验证。
+
+随后按用户要求[调整结构与合成输入](docs/ORE_DRILL2_STRUCTURE_RECIPE.md)：对标采矿场 II（整包 IV 制作），使用钛框架、稳定钛机械方块及 1 个采矿场 II 控制器。3×7×3 布局、其余合成材料和机器生产规则保持。旧结构需要将锇铱框架和采矿用锇铱外壳换成新材料；最新包为 `0.1.0-beta1-fix2`，完整构建和既有 101 项测试通过，四 JVM 发布 JAR 类加载通过，详见本轮报告。
 
 全部待人工测试集中在[人工游戏测试总清单](docs/MANUAL_GAME_TESTS.md)，阶段 2 至 7 的开发实现及开发端验证完成后由用户统一导入游戏执行；不作为各开发阶段继续工作的前置条件。
 
