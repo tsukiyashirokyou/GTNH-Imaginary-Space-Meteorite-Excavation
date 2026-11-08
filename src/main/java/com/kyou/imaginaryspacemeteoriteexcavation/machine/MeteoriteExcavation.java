@@ -111,6 +111,7 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
     private boolean freeOrb;
     private NBTBase invalidCycleTag;
     private String outputSummary = "";
+    private String inputDiagnostic = "";
     private Object previewOwner;
     private long previewRevision = Long.MIN_VALUE;
     private NBTTagCompound wailaPreview = new NBTTagCompound();
@@ -257,6 +258,7 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
         PreparedProcess<ItemIdentity> prepared;
         PaidBatch paid;
         try {
+            inputDiagnostic = "";
             verifyLocalInputs();
             List<ItemStack> order = new ArrayList<>();
             for (MTEHatchInputBus bus : mInputBusses) {
@@ -292,6 +294,7 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
             try {
                 keep = filter(ritual.definition());
             } catch (IllegalArgumentException invalidBook) {
+                inputDiagnostic = "Invalid filtering book: " + invalidBook.getMessage();
                 return rejected(ProcessFailure.UNSUPPORTED_INPUT);
             }
             MeteorProcessPlanner.Result<ItemIdentity> result = planner.prepare(
@@ -313,6 +316,7 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
         } catch (ArithmeticException overflow) {
             return rejected(ProcessFailure.OVERFLOW);
         } catch (UnsupportedOperationException unsupported) {
+            inputDiagnostic = unsupported.getMessage();
             return rejected(ProcessFailure.UNSUPPORTED_INPUT);
         } catch (IllegalArgumentException invalidPowerOrInput) {
             return rejected(ProcessFailure.INSUFFICIENT_POWER);
@@ -334,6 +338,7 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
         lastVoided = paid.drilling - paid.kept;
         lastDrilling = paid.drilling;
         failure = ProcessFailure.NONE;
+        inputDiagnostic = "";
         recipeRetry.progressed(tick);
         updateSlots();
         markDirty();
@@ -388,12 +393,22 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
     private void verifyLocalInputs() {
         Set<MTEHatch> unique = Collections.newSetFromMap(new IdentityHashMap<>());
         for (MTEHatchInputBus bus : mInputBusses) {
-            if (!LocalStartResources.supportsItemBus(bus) || !bus.isValid() || !unique.add(bus))
-                throw new UnsupportedOperationException("Unverified/duplicate item input");
+            if (!LocalStartResources.supportsItemBus(bus))
+                throw new UnsupportedOperationException("Unsupported item input bus: " + bus.getClass()
+                    .getName());
+            if (!bus.isValid()) throw new UnsupportedOperationException("Invalid item input bus: " + bus.getClass()
+                .getName());
+            if (!unique.add(bus)) throw new UnsupportedOperationException("Duplicate item input bus: " + bus.getClass()
+                .getName());
         }
         for (MTEHatchInput hatch : mInputHatches) {
-            if (!LocalStartResources.supportsFluidHatch(hatch) || !hatch.isValid() || !unique.add(hatch))
-                throw new UnsupportedOperationException("Unverified/duplicate fluid input");
+            if (!LocalStartResources.supportsFluidHatch(hatch))
+                throw new UnsupportedOperationException("Unsupported fluid input hatch: " + hatch.getClass()
+                    .getName());
+            if (!hatch.isValid()) throw new UnsupportedOperationException("Invalid fluid input hatch: " + hatch.getClass()
+                .getName());
+            if (!unique.add(hatch)) throw new UnsupportedOperationException("Duplicate fluid input hatch: " + hatch.getClass()
+                .getName());
         }
         for (MTEHatch hatch : mEnergyHatches) {
             if (!unique.add(hatch)) throw new UnsupportedOperationException("Duplicate energy input");
@@ -583,8 +598,15 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
     }
 
     public String runtimeDiagnostic() {
-        String detail = !cycle.fault()
-            .isEmpty() ? cycle.fault() : outputPort == null ? "" : outputPort.lastFailure();
+        String detail;
+        if (!cycle.fault()
+            .isEmpty()) {
+            detail = cycle.fault();
+        } else if (failure == ProcessFailure.UNSUPPORTED_INPUT && !inputDiagnostic.isEmpty()) {
+            detail = inputDiagnostic;
+        } else {
+            detail = outputPort == null ? "" : outputPort.lastFailure();
+        }
         return detail == null ? "" : detail.substring(0, Math.min(512, detail.length()));
     }
 

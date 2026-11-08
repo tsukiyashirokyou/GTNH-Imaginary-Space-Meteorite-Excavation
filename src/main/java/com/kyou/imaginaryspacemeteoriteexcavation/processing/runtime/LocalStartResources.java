@@ -61,7 +61,9 @@ public final class LocalStartResources implements ProcessingPorts.Resources {
         List<Supplier<FluidStack>> fluids = new ArrayList<>();
         BitSet virtualFluid = new BitSet();
         for (MTEHatchInputBus bus : localBusses) {
-            if (!supportsItemBus(bus)) throw new UnsupportedOperationException("Non-ordinary item input");
+            if (!supportsItemBus(bus))
+                throw new UnsupportedOperationException("Unsupported item input bus: " + bus.getClass()
+                    .getName());
             int circuit = recipeCircuitSlot(bus);
             for (int slot = 0; slot < bus.getSizeInventory(); slot++) {
                 if (slot == circuit) continue;
@@ -71,7 +73,9 @@ public final class LocalStartResources implements ProcessingPorts.Resources {
             }
         }
         for (MTEHatchInput hatch : localHatches) {
-            if (!supportsFluidHatch(hatch)) throw new UnsupportedOperationException("Unverified fluid input");
+            if (!supportsFluidHatch(hatch))
+                throw new UnsupportedOperationException("Unsupported fluid input hatch: " + hatch.getClass()
+                    .getName());
             if (hatch.getClass() == MTEHatchInputDebug.class) {
                 MTEHatchInputDebug debug = (MTEHatchInputDebug) hatch;
                 // Native getStoredFluids exposes every configured debug slot, not only getFluid()'s first one.
