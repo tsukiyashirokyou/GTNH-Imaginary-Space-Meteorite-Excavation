@@ -13,6 +13,7 @@ import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.util.EnumChatFormatting;
 
+import com.kyou.imaginaryspacemeteoriteexcavation.gui.PlayerText;
 import com.kyou.imaginaryspacemeteoriteexcavation.meteor.MeteorGeometry;
 import com.kyou.imaginaryspacemeteoriteexcavation.meteor.runtime.BoundedNbtSize;
 import com.kyou.imaginaryspacemeteoriteexcavation.meteor.runtime.ItemIdentity;
@@ -105,7 +106,8 @@ public final class ExcavationWaila {
             }
         }
         String diagnostic = tag.getString("diagnostic");
-        if (!diagnostic.isEmpty()) tip.add(translateToLocalFormatted("isme.waila.detail", clipped(diagnostic)));
+        String detail = PlayerText.detail(state, diagnostic);
+        if (!detail.isEmpty()) tip.add(translateToLocalFormatted("isme.waila.detail", detail));
     }
 
     private static void appendItems(List<String> tip, NBTTagCompound preview) {
@@ -113,7 +115,7 @@ public final class ExcavationWaila {
         for (int i = 0; i < Math.min(PREVIEW_ITEMS, list.tagCount()); i++) {
             NBTTagCompound item = list.getCompoundTagAt(i);
             Item type = (Item) Item.itemRegistry.getObject(item.getString("registry"));
-            String name = item.hasKey("fallback") ? item.getString("fallback") : item.getString("registry");
+            String name = translateToLocal("isme.gui.unknown_item");
             String icon = "";
             if (type != null) {
                 ItemStack sample = new ItemStack(type, 1, item.getInteger("damage"));
@@ -125,11 +127,10 @@ public final class ExcavationWaila {
                     icon = TTRenderStack.create(sample, true);
                 } catch (RuntimeException requiresFullItemData) {
                     // A bounded preview may omit a large tag required by a third-party name/icon implementation.
-                    name = item.getString("registry");
+                    name = translateToLocal("isme.gui.unknown_item");
                     icon = "";
                 }
             }
-            if (item.getBoolean("simplified")) name += translateToLocal("isme.waila.simplified");
             tip.add(
                 "  " + icon
                     + GTWaila.getStackListLine(

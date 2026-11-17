@@ -7,6 +7,7 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.ChatComponentTranslation;
+import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.StatCollector;
 import net.minecraft.world.World;
 
@@ -62,15 +63,21 @@ public final class FilteringBook extends Item implements IGuiHolder<PlayerInvent
     @SideOnly(Side.CLIENT)
     @Override
     public void addInformation(ItemStack stack, EntityPlayer player, List<String> tooltip, boolean advanced) {
-        tooltip.add(StatCollector.translateToLocal("isme.book.open"));
-        tooltip.add(StatCollector.translateToLocal("isme.book.split"));
+        tooltip.add(EnumChatFormatting.AQUA + StatCollector.translateToLocal("isme.book.tooltip.function"));
         try {
             tooltip.add(
-                StatCollector.translateToLocal(
+                EnumChatFormatting.GREEN + StatCollector.translateToLocal(
                     books.read(stack)
                         .configured() ? "isme.book.configured" : "isme.book.default"));
         } catch (IllegalArgumentException invalid) {
-            tooltip.add(StatCollector.translateToLocal("isme.book.status.2"));
+            tooltip.add(EnumChatFormatting.RED + StatCollector.translateToLocal("isme.book.status.2"));
         }
+        tooltip.add(EnumChatFormatting.GRAY + StatCollector.translateToLocal("isme.book.tooltip.void"));
+        tooltip.add("");
+        tooltip.add(EnumChatFormatting.GRAY + StatCollector.translateToLocal("isme.book.tooltip.copy"));
+        tooltip.add(EnumChatFormatting.GRAY + StatCollector.translateToLocal("isme.book.tooltip.clear"));
+        tooltip.add(EnumChatFormatting.YELLOW + StatCollector.translateToLocal("isme.book.open"));
+        if (stack.stackSize != 1)
+            tooltip.add(EnumChatFormatting.DARK_GRAY + StatCollector.translateToLocal("isme.book.split"));
     }
 }

@@ -10,6 +10,7 @@ import static gregtech.api.enums.HatchElement.MultiAmpEnergy;
 import static gregtech.api.enums.HatchElement.OutputBus;
 import static gregtech.api.util.GTStructureUtility.buildHatchAdder;
 import static gregtech.api.util.GTStructureUtility.ofFrame;
+import static net.minecraft.util.StatCollector.translateToLocal;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,6 +26,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTBase;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.tileentity.TileEntity;
+import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ForgeDirection;
 
@@ -61,6 +63,7 @@ import com.kyou.imaginaryspacemeteoriteexcavation.processing.runtime.MeteorRecip
 import com.kyou.imaginaryspacemeteoriteexcavation.processing.runtime.NativeBatchScheduler;
 import com.kyou.imaginaryspacemeteoriteexcavation.processing.runtime.NativePowerSupply;
 
+import gregtech.api.GregTechAPI;
 import gregtech.api.enums.ItemList;
 import gregtech.api.enums.Materials;
 import gregtech.api.enums.Textures;
@@ -207,25 +210,29 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
 
     @Override
     protected MultiblockTooltipBuilder createTooltip() {
-        return new MultiblockTooltipBuilder().addMachineType("Imaginary Space Meteorite Excavation")
-            .addInfo("Standard meteorite expectations; final block items, floor after batching.")
-            .addInfo("3072 EU/t base, perfect overclocking and native 128-tick batching.")
-            .addInfo("Focus + LP + 1 L drilling fluid per pre-filter item are charged at start.")
-            .addInfo("Output blockage retains completed items. Power loss discards unfinished yield.")
-            .addInfo("Power switch pauses. Normal saves and controller drops preserve the paid plan.")
-            .addInfo("Native ordinary/compressed/ME output; no void or overflow cells in the ME bus.")
-            .addInfo("Three slots: bound Blood Orb, optional Filtering Book, spatial pylons.")
-            .addInfo("Spatial pylons: up to 2,147,483,647; only normal stacks can be withdrawn.")
-            .addInfo("Multiple normal energy hatches OR one multi-amp hatch. No mixing or lasers.")
+        return new MultiblockTooltipBuilder().addMachineType(translateToLocal("isme.machine.type"))
+            .addInfo(EnumChatFormatting.AQUA + translateToLocal("isme.machine.description"))
+            .addSeparator()
+            .addInfo(translateToLocal("isme.machine.inputs"))
+            .addInfo(translateToLocal("isme.machine.power"))
+            .addInfo(translateToLocal("isme.machine.pylons"))
+            .addInfo(translateToLocal("isme.machine.fluid"))
+            .addInfo(translateToLocal("isme.machine.filter"))
+            .addInfo(EnumChatFormatting.RED + translateToLocal("isme.machine.loss"))
+            .addSeparator()
+            .addInfo(translateToLocal("isme.machine.energy_count"))
+            .addInfo(translateToLocal("isme.machine.energy"))
+            .addInfo(translateToLocal("isme.machine.output"))
             .beginStructureBlock(3, 7, 3, false)
-            .addController("Bottom front center")
-            .addCasing("3", "Stable Titanium Machine Casing", false)
-            .addStructureInfo("15 Titanium frames; 8 bottom positions accept casing or required hatches.")
-            .addInputBus("1+", "Bottom layer", 1)
-            .addInputHatch("1+", "Bottom layer", 1)
-            .addOutputBus("1+", "Bottom layer", 1)
-            .addMaintenanceHatch("1+", "Bottom layer", 1)
-            .addEnergyHatch("1+ normal OR 1 multi-amp", "Bottom layer", 1)
+            .addController(translateToLocal("isme.machine.controller"))
+            .addCasing("3", new ItemStack(GregTechAPI.sBlockCasings4, 1, 2).getDisplayName(), false)
+            .addStructureInfo(translateToLocal("isme.machine.frames"))
+            .addStructureInfo(translateToLocal("isme.machine.hatch_positions"))
+            .addInputBus("1+", translateToLocal("isme.machine.bottom"), 1)
+            .addInputHatch("1+", translateToLocal("isme.machine.bottom"), 1)
+            .addOutputBus("1+", translateToLocal("isme.machine.bottom"), 1)
+            .addMaintenanceHatch("1+", translateToLocal("isme.machine.bottom"), 1)
+            .addEnergyHatch("1+", translateToLocal("isme.machine.bottom"), 1)
             .toolTipFinisher();
     }
 
@@ -577,6 +584,14 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
         return cycle.running() == null ? recipeLabel : cycle.running().recipe;
     }
 
+    public String currentFocusSignature() {
+        FilterCatalogueView.Ritual ritual = FilterCatalogueView.current()
+            .forId(currentRecipe());
+        return ritual == null ? ""
+            : ritual.definition()
+                .focus();
+    }
+
     public int currentBatch() {
         return cycle.running() == null ? lastBatch : cycle.running().batch;
     }
@@ -632,6 +647,10 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
 
     public String outputSummary() {
         return outputSummary;
+    }
+
+    public NBTTagCompound outputPreview() {
+        return (NBTTagCompound) wailaPreview.copy();
     }
 
     private void refreshOutputSummary() {

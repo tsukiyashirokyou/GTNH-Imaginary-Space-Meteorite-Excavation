@@ -1,6 +1,6 @@
 # AGENTS.md — Imaginary Space Meteorite Excavation
 
-更新日期：2026-11-17。阶段 1 至 7、ME 输出、规划优化/WAILA、空间塔和原生 debug 仓体已完成开发端验证，控制器生产入口已接通。现代 Java 构建采用 JDK 25、官方 JVM Downgrader、Java 8 基础字节码与 MR 17/21/25，见 docs/MODERN_JAVA_BUILD.md。过滤书 GUI 修复和采矿场 II 结构/控制器输入调整保留，后者见 docs/ORE_DRILL2_STRUCTURE_RECIPE.md。最新 search1 新增过滤书原生中文物品名搜索与点击跳转，完整构建与 109 项测试通过，见 docs/FILTER_BOOK_SEARCH.md。阶段 8 已由用户开始：新增 F-08 后共 55 项人工清单，F-01 报告失败、开发修复后待游戏复测，其余 54 项未验证。
+更新日期：2026-11-17。阶段 1 至 7、ME 输出、规划优化/WAILA、空间塔和原生 debug 仓体已完成开发端验证，控制器生产入口已接通。现代 Java 构建采用 JDK 25、官方 JVM Downgrader、Java 8 基础字节码与 MR 17/21/25，见 docs/MODERN_JAVA_BUILD.md。过滤书 GUI 修复、采矿场 II 结构/输入和原生中文物品名搜索保留，分别见对应报告。最新 ui1 整理双语文案、机器界面及物品提示，普通构建与 Java 8/17/21/25 下 111 项测试通过，见 docs/TEXT_UI_POLISH.md。阶段 8 仍共 55 项人工清单，F-01 报告失败、开发修复后待游戏复测，其余 54 项未验证。
 
 ## 1. 项目身份与文档优先级
 
@@ -148,6 +148,8 @@
 ### 3.9 WAILA 只读信息
 
 WAILA 已通过原生 getExtraWailaNBT 和父类显示接口接入，只同步当前 paid batch/pending 的有限快照；预览随对象/revision 刷新，不计算产量或访问 LP/输出事务。新 PaidBatch 可选保存显示用半径；旧存档半径未知仍可继续。空闲不显示历史批次，暂停显示零当前耗能，fault 待输出未知；最多三种、每条约 2 KiB，HUD 省略大 NBT 不影响生产完整身份。
+
+2026-11-17 用户授权文案与界面整理：en_US.lang / zh_CN.lang 均已追踪，常规说明只给玩家必要信息，不写开发算法、NBT/协议说明或“请……”语气。机器 GUI 保留原生终端和三槽，使用双信息面板；无活动批次时统计显示横线，LP 保留上次查询语义。GUI/WAILA 物品名在客户端本地化，原始 ID/诊断不作普通显示；故障类别、过滤销毁和断电损失保留。过滤书窗口布局与交互不改，只整理文本和物品提示，见 docs/TEXT_UI_POLISH.md。
 
 ## 4. 构建、依赖与侵入技术
 

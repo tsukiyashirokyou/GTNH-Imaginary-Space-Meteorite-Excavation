@@ -310,7 +310,10 @@ public final class WailaTest {
         List<String> tip = lines(root);
         assertTrue(
             tip.toString()
-                .contains("brief"));
+                .contains("Test Ore"));
+        assertFalse(
+            tip.toString()
+                .contains(net.minecraft.util.EnumChatFormatting.AQUA + "minecraft:isme_waila_ore"));
         assertTrue(tip.size() <= 8);
     }
 }

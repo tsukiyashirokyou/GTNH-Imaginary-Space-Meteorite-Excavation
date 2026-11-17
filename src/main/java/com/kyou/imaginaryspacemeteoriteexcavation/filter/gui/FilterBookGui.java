@@ -197,18 +197,6 @@ public final class FilterBookGui {
                 .addLine(
                     IKey.dynamic(
                         () -> search.result(index) == null ? ""
-                            : search.result(index)
-                                .entry()
-                                .signature()))
-                .addLine(
-                    IKey.dynamic(
-                        () -> search.result(index) == null ? ""
-                            : search.result(index)
-                                .entry()
-                                .id()))
-                .addLine(
-                    IKey.dynamic(
-                        () -> search.result(index) == null ? ""
                             : StatCollector.translateToLocalFormatted(
                                 "isme.book.radius",
                                 search.result(index)

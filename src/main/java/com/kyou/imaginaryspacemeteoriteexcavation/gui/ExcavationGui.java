@@ -1,16 +1,24 @@
 package com.kyou.imaginaryspacemeteoriteexcavation.gui;
 
+import static com.gtnewhorizon.gtnhlib.util.numberformatting.NumberFormatUtil.formatNumber;
+
+import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.StatCollector;
 
 import com.cleanroommc.modularui.api.drawable.IKey;
 import com.cleanroommc.modularui.factory.PosGuiData;
 import com.cleanroommc.modularui.screen.ModularPanel;
 import com.cleanroommc.modularui.screen.UISettings;
+import com.cleanroommc.modularui.utils.Alignment;
+import com.cleanroommc.modularui.utils.serialization.ByteBufAdapters;
 import com.cleanroommc.modularui.value.sync.BooleanSyncValue;
+import com.cleanroommc.modularui.value.sync.GenericSyncValue;
 import com.cleanroommc.modularui.value.sync.IntSyncValue;
 import com.cleanroommc.modularui.value.sync.LongSyncValue;
 import com.cleanroommc.modularui.value.sync.PanelSyncManager;
 import com.cleanroommc.modularui.value.sync.StringSyncValue;
+import com.cleanroommc.modularui.widget.ParentWidget;
+import com.cleanroommc.modularui.widgets.ProgressWidget;
 import com.cleanroommc.modularui.widgets.TextWidget;
 import com.cleanroommc.modularui.widgets.layout.Flow;
 import com.cleanroommc.modularui.widgets.slot.ItemSlot;
@@ -18,6 +26,8 @@ import com.kyou.imaginaryspacemeteoriteexcavation.inventory.MachineItems;
 import com.kyou.imaginaryspacemeteoriteexcavation.machine.MeteoriteExcavation;
 import com.kyou.imaginaryspacemeteoriteexcavation.meteor.MeteorGeometry;
 
+import gregtech.api.modularui2.GTGuiTextures;
+import gregtech.api.modularui2.GTWidgetThemes;
 import gregtech.common.gui.modularui.multiblock.base.MTEMultiBlockBaseGui;
 
 public final class ExcavationGui extends MTEMultiBlockBaseGui<MeteoriteExcavation> {
@@ -26,7 +36,8 @@ public final class ExcavationGui extends MTEMultiBlockBaseGui<MeteoriteExcavatio
     private StringSyncValue orbOwner;
     private IntSyncValue normalEnergy;
     private IntSyncValue multiEnergy;
-    private StringSyncValue state, recipe, outputPreview;
+    private StringSyncValue state, recipe;
+    private GenericSyncValue<NBTTagCompound, ?> outputPreview;
     private StringSyncValue diagnostic;
     private LongSyncValue balance, kept, voided, drilling, pending;
     private IntSyncValue batch, progress, duration;
@@ -58,6 +69,11 @@ public final class ExcavationGui extends MTEMultiBlockBaseGui<MeteoriteExcavatio
     }
 
     @Override
+    protected int getTerminalRowHeight() {
+        return 90;
+    }
+
+    @Override
     protected void registerSyncValues(PanelSyncManager syncManager) {
         super.registerSyncValues(syncManager);
         towerCount = new IntSyncValue(
@@ -73,8 +89,12 @@ public final class ExcavationGui extends MTEMultiBlockBaseGui<MeteoriteExcavatio
         state = new StringSyncValue(multiblock::runtimeState);
         diagnostic = new StringSyncValue(multiblock::runtimeDiagnostic);
         syncManager.syncValue("isme.diagnostic", diagnostic);
-        recipe = new StringSyncValue(multiblock::currentRecipe);
-        outputPreview = new StringSyncValue(multiblock::outputSummary);
+        recipe = new StringSyncValue(multiblock::currentFocusSignature);
+        outputPreview = GenericSyncValue.builder(NBTTagCompound.class)
+            .getter(multiblock::outputPreview)
+            .adapter(ByteBufAdapters.NBT)
+            .copy(value -> (NBTTagCompound) value.copy())
+            .build();
         balance = new LongSyncValue(multiblock::lastLpBalance);
         kept = new LongSyncValue(multiblock::retainedCount);
         voided = new LongSyncValue(multiblock::voidedCount);
@@ -105,139 +125,191 @@ public final class ExcavationGui extends MTEMultiBlockBaseGui<MeteoriteExcavatio
             .child(createTerminalRow(panel, syncManager))
             .child(
                 Flow.row()
-                    .fullWidth()
-                    .height(36)
-                    .child(
-                        Flow.column()
-                            .width(62)
-                            .height(34)
-                            .child(
-                                IKey.lang("isme.gui.orb")
-                                    .asWidget()
-                                    .height(12))
-                            .child(
-                                new ItemSlot().slot(
-                                    new ExcavationContainer.DedicatedSlot(multiblock.items(), MachineItems.ORB)
-                                        .singletonSlotGroup())))
-                    .child(
-                        Flow.column()
-                            .width(62)
-                            .height(34)
-                            .child(
-                                IKey.lang("isme.gui.book")
-                                    .asWidget()
-                                    .height(12))
-                            .child(
-                                new ItemSlot().slot(
-                                    new ExcavationContainer.DedicatedSlot(multiblock.items(), MachineItems.BOOK)
-                                        .singletonSlotGroup())))
-                    .child(
-                        Flow.column()
-                            .width(62)
-                            .height(34)
-                            .child(
-                                IKey.lang("isme.gui.pylons")
-                                    .asWidget()
-                                    .height(12))
-                            .child(
-                                new ItemSlot()
-                                    .slot(new ExcavationContainer.TowerSlot(multiblock).singletonSlotGroup()))))
-            .child(statusColumns())
+                    .height(4))
             .child(
-                line(
-                    IKey.dynamic(
-                        () -> pending.getLongValue() < 0 ? StatCollector.translateToLocal("isme.gui.pending_unknown")
-                            : StatCollector.translateToLocalFormatted("isme.gui.pending", pending.getLongValue())))
-                                .tooltipBuilder(t -> t.add(outputPreview.getStringValue()))
-                                .tooltipAutoUpdate(true))
+                Flow.row()
+                    .size(336, 128)
+                    .child(setupPanel())
+                    .child(
+                        Flow.column()
+                            .size(6, 128))
+                    .child(processPanel()))
+            .child(
+                Flow.row()
+                    .height(4))
             .child(createInventoryRow(panel, syncManager));
     }
 
-    private Flow statusColumns() {
-        Flow left = Flow.column()
-            .width(166)
-            .height(72)
-            .child(
-                line(
-                    IKey.dynamic(
-                        () -> StatCollector
-                            .translateToLocalFormatted("isme.gui.tower_count", towerCount.getIntValue()))))
-            .child(
-                line(
-                    IKey.dynamic(
-                        () -> StatCollector.translateToLocalFormatted(
-                            "isme.gui.radius",
-                            MeteorGeometry.maxRadiusForTowers(towerCount.getIntValue()) == 0
-                                ? StatCollector.translateToLocal("isme.gui.none")
-                                : Integer.toString(MeteorGeometry.maxRadiusForTowers(towerCount.getIntValue()))))))
-            .child(
-                line(
-                    IKey.dynamic(
-                        () -> orbOwner.getStringValue()
-                            .isEmpty()
-                                ? StatCollector.translateToLocal("isme.gui.missing_orb")
-                                : StatCollector
-                                    .translateToLocalFormatted("isme.gui.owner", orbOwner.getStringValue()))))
-            .child(
-                line(
-                    IKey.dynamic(
-                        () -> freeOrb.getBoolValue() ? StatCollector.translateToLocal("isme.gui.free_lp")
-                            : balance.getLongValue() < 0 ? StatCollector.translateToLocal("isme.gui.lp_unchecked")
-                                : StatCollector.translateToLocalFormatted("isme.gui.lp", balance.getLongValue()))))
-            .child(
-                line(
-                    IKey.dynamic(
-                        () -> StatCollector.translateToLocalFormatted(
-                            "isme.gui.energy",
-                            normalEnergy.getIntValue(),
-                            multiEnergy.getIntValue()))))
-            .child(
-                line(IKey.dynamic(() -> StatCollector.translateToLocal("isme.state." + state.getStringValue())))
-                    .tooltipBuilder(t -> t.add(diagnostic.getStringValue()))
-                    .tooltipAutoUpdate(true));
-        Flow right = Flow.column()
-            .width(166)
-            .height(72)
-            .child(
-                line(IKey.dynamic(() -> StatCollector.translateToLocalFormatted("isme.gui.recipe", shortRecipe())))
-                    .tooltipBuilder(t -> t.add(recipe.getStringValue()))
-                    .tooltipAutoUpdate(true))
-            .child(
-                line(
-                    IKey.dynamic(() -> StatCollector.translateToLocalFormatted("isme.gui.batch", batch.getIntValue()))))
-            .child(
-                line(
-                    IKey.dynamic(
-                        () -> StatCollector.translateToLocalFormatted(
-                            "isme.gui.progress",
-                            progress.getIntValue(),
-                            duration.getIntValue()))))
-            .child(
-                line(IKey.dynamic(() -> StatCollector.translateToLocalFormatted("isme.gui.kept", kept.getLongValue()))))
-            .child(
-                line(
-                    IKey.dynamic(
-                        () -> StatCollector.translateToLocalFormatted("isme.gui.voided", voided.getLongValue()))))
-            .child(
-                line(
-                    IKey.dynamic(
-                        () -> StatCollector.translateToLocalFormatted("isme.gui.drilling", drilling.getLongValue()))));
-        return Flow.row()
-            .fullWidth()
-            .height(72)
-            .child(left)
-            .child(right);
+    private ParentWidget<?> setupPanel() {
+        ParentWidget<?> card = card(162);
+        card.child(
+            heading(IKey.lang("isme.gui.setup")).pos(6, 5)
+                .size(150, 12));
+        card.child(
+            Flow.row()
+                .pos(6, 20)
+                .size(150, 34)
+                .child(
+                    slot(
+                        "isme.gui.orb",
+                        new ItemSlot().slot(
+                            new ExcavationContainer.DedicatedSlot(multiblock.items(), MachineItems.ORB)
+                                .singletonSlotGroup())))
+                .child(
+                    slot(
+                        "isme.gui.book",
+                        new ItemSlot().slot(
+                            new ExcavationContainer.DedicatedSlot(multiblock.items(), MachineItems.BOOK)
+                                .singletonSlotGroup())))
+                .child(
+                    slot(
+                        "isme.gui.pylons",
+                        new ItemSlot().slot(new ExcavationContainer.TowerSlot(multiblock).singletonSlotGroup()))));
+        card.child(
+            line(
+                IKey.dynamic(
+                    () -> StatCollector
+                        .translateToLocalFormatted("isme.gui.tower_count", formatNumber(towerCount.getIntValue()))))
+                            .pos(6, 56));
+        card.child(
+            line(
+                IKey.dynamic(
+                    () -> StatCollector.translateToLocalFormatted(
+                        "isme.gui.radius",
+                        MeteorGeometry.maxRadiusForTowers(towerCount.getIntValue()) == 0
+                            ? StatCollector.translateToLocal("isme.gui.none")
+                            : formatNumber(MeteorGeometry.maxRadiusForTowers(towerCount.getIntValue()))))).pos(6, 68));
+        card.child(
+            line(
+                IKey.dynamic(
+                    () -> orbOwner.getStringValue()
+                        .isEmpty() ? StatCollector.translateToLocal("isme.gui.missing_orb")
+                            : StatCollector.translateToLocalFormatted("isme.gui.owner", orbOwner.getStringValue())))
+                                .pos(6, 80));
+        card.child(
+            line(
+                IKey.dynamic(
+                    () -> freeOrb.getBoolValue() ? StatCollector.translateToLocal("isme.gui.free_lp")
+                        : balance.getLongValue() < 0 ? StatCollector.translateToLocal("isme.gui.lp_unchecked")
+                            : StatCollector
+                                .translateToLocalFormatted("isme.gui.lp", formatNumber(balance.getLongValue()))))
+                                    .pos(6, 92));
+        card.child(
+            line(
+                IKey.dynamic(
+                    () -> StatCollector.translateToLocalFormatted(
+                        "isme.gui.energy",
+                        formatNumber(normalEnergy.getIntValue()),
+                        formatNumber(multiEnergy.getIntValue())))).pos(6, 104));
+        return card;
     }
 
-    private String shortRecipe() {
-        String value = recipe.getStringValue();
-        return value.length() > 20 ? value.substring(0, 17) + "..." : value;
+    private ParentWidget<?> processPanel() {
+        ParentWidget<?> card = card(168);
+        card.child(
+            heading(IKey.dynamic(() -> StatCollector.translateToLocal("isme.state." + state.getStringValue())))
+                .scale(0.8f)
+                .color(() -> PlayerText.stateColor(state.getStringValue()))
+                .pos(6, 5)
+                .size(156, 12)
+                .tooltipBuilder(t -> {
+                    String detail = PlayerText.detail(state.getStringValue(), diagnostic.getStringValue());
+                    if (!detail.isEmpty()) t.add(detail);
+                })
+                .tooltipAutoUpdate(true));
+        card.child(
+            line(IKey.dynamic(() -> PlayerText.focusName(recipe.getStringValue()))).pos(6, 20)
+                .size(156, 18)
+                .tooltipBuilder(t -> t.add(PlayerText.focusName(recipe.getStringValue())))
+                .tooltipAutoUpdate(true));
+        card.child(
+            new ProgressWidget().progress(() -> PlayerText.progress(progress.getIntValue(), duration.getIntValue()))
+                .texture(GTGuiTextures.PROGRESSBAR_ARROW_MULTIPLE, 156)
+                .pos(6, 42)
+                .size(156, 6));
+        card.child(
+            line(
+                IKey.dynamic(
+                    () -> duration.getIntValue() <= 0 ? "—"
+                        : StatCollector.translateToLocalFormatted(
+                            "isme.gui.progress_percent",
+                            formatNumber(PlayerText.percent(progress.getIntValue(), duration.getIntValue())))))
+                                .pos(6, 50)
+                                .size(156, 10));
+        card.child(
+            line(
+                IKey.dynamic(
+                    () -> StatCollector.translateToLocalFormatted("isme.gui.batch", currentValue(batch.getIntValue()))))
+                        .pos(6, 64));
+        card.child(
+            line(
+                IKey.dynamic(
+                    () -> StatCollector.translateToLocalFormatted("isme.gui.kept", currentValue(kept.getLongValue()))))
+                        .pos(6, 76));
+        card.child(
+            line(
+                IKey.dynamic(
+                    () -> StatCollector
+                        .translateToLocalFormatted("isme.gui.voided", currentValue(voided.getLongValue()))))
+                            .pos(6, 88));
+        card.child(
+            line(
+                IKey.dynamic(
+                    () -> StatCollector
+                        .translateToLocalFormatted("isme.gui.drilling", currentValue(drilling.getLongValue()))))
+                            .pos(6, 100));
+        card.child(
+            line(
+                IKey.dynamic(
+                    () -> pending.getLongValue() < 0 ? StatCollector.translateToLocal("isme.gui.pending_unknown")
+                        : StatCollector
+                            .translateToLocalFormatted("isme.gui.pending", formatNumber(pending.getLongValue()))))
+                                .pos(6, 112)
+                                .tooltipBuilder(t -> {
+                                    t.add(StatCollector.translateToLocal("isme.gui.output_preview"));
+                                    for (String value : PlayerText.outputLines(outputPreview.getValue())) t.add(value);
+                                })
+                                .tooltipAutoUpdate(true));
+        return card;
+    }
+
+    private String currentValue(long value) {
+        return duration.getIntValue() > 0 ? formatNumber(value) : "—";
+    }
+
+    private static ParentWidget<?> card(int width) {
+        return new ParentWidget<>().size(width, 128)
+            .widgetTheme(GTWidgetThemes.BACKGROUND_TERMINAL);
+    }
+
+    private static ParentWidget<?> slot(String label, ItemSlot slot) {
+        return new ParentWidget<>().size(50, 34)
+            .child(
+                IKey.lang(label)
+                    .asWidget()
+                    .scale(0.75f)
+                    .color(0xFFD0D8DD)
+                    .shadow(false)
+                    .pos(0, 0)
+                    .size(50, 12))
+            .child(
+                slot.pos(15, 14)
+                    .size(18));
+    }
+
+    private static TextWidget<?> heading(IKey key) {
+        return key.asWidget()
+            .color(0xFF7ACDD7)
+            .shadow(false);
     }
 
     private static TextWidget<?> line(IKey key) {
         return key.asWidget()
             .height(12)
-            .fullWidth();
+            .width(150)
+            .scale(0.8f)
+            .color(0xFFD0D8DD)
+            .shadow(false);
     }
 
     @Override
@@ -245,6 +317,9 @@ public final class ExcavationGui extends MTEMultiBlockBaseGui<MeteoriteExcavatio
         // Replace the native controller slot: exactly the three dedicated slots above.
         return Flow.column()
             .width(18)
+            .height(76)
+            .leftRel(1, -2, 1)
+            .mainAxisAlignment(Alignment.MainAxis.END)
             .child(createPowerSwitchButton())
             .child(createStructureUpdateButton(syncManager));
     }
