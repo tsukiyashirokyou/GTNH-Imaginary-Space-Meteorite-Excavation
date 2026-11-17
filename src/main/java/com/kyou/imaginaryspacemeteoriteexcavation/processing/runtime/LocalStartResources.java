@@ -61,8 +61,8 @@ public final class LocalStartResources implements ProcessingPorts.Resources {
         List<Supplier<FluidStack>> fluids = new ArrayList<>();
         BitSet virtualFluid = new BitSet();
         for (MTEHatchInputBus bus : localBusses) {
-            if (!supportsItemBus(bus))
-                throw new UnsupportedOperationException("Unsupported item input bus: " + bus.getClass()
+            if (!supportsItemBus(bus)) throw new UnsupportedOperationException(
+                "Unsupported item input bus: " + bus.getClass()
                     .getName());
             int circuit = recipeCircuitSlot(bus);
             for (int slot = 0; slot < bus.getSizeInventory(); slot++) {
@@ -73,8 +73,8 @@ public final class LocalStartResources implements ProcessingPorts.Resources {
             }
         }
         for (MTEHatchInput hatch : localHatches) {
-            if (!supportsFluidHatch(hatch))
-                throw new UnsupportedOperationException("Unsupported fluid input hatch: " + hatch.getClass()
+            if (!supportsFluidHatch(hatch)) throw new UnsupportedOperationException(
+                "Unsupported fluid input hatch: " + hatch.getClass()
                     .getName());
             if (hatch.getClass() == MTEHatchInputDebug.class) {
                 MTEHatchInputDebug debug = (MTEHatchInputDebug) hatch;

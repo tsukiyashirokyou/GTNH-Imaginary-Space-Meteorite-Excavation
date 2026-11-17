@@ -21,14 +21,16 @@ import cpw.mods.fml.common.registry.GameRegistry;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 
-/** Fixed widgets, bounded current-page snapshots, and versioned operation intents only. */
+/** Bounded directory/current-page snapshots and versioned operation intents only. */
 public final class FilterBookSync extends SyncHandler<FilterBookSync> {
 
     public static final int CELLS = 24;
-    public static final int PREVIOUS = 0, NEXT = 1, MODE = 2, RESET = 3, TOGGLE = 4, ITEMS_PREVIOUS = 5, ITEMS_NEXT = 6;
+    public static final int PREVIOUS = 0, NEXT = 1, MODE = 2, RESET = 3, TOGGLE = 4, ITEMS_PREVIOUS = 5, ITEMS_NEXT = 6,
+        JUMP = 7;
     private final PlayerInventoryGuiData data;
     private final FilterBookSession session;
     private final FilterCatalogueView catalogue;
+    private final FilterBookSearch search = new FilterBookSearch();
     private View view = new View();
     private int ritualIndex;
     private int offset;
@@ -85,6 +87,11 @@ public final class FilterBookSync extends SyncHandler<FilterBookSync> {
             if (next < 0 || next >= rituals.size()) return;
             ritualIndex = next;
             offset = 0;
+        } else if (action == JUMP) {
+            if (cell < 0 || cell >= rituals.size()) return;
+            // The directory order is fixed for this session; valid() rejects a replaced catalogue.
+            ritualIndex = cell;
+            offset = 0;
         } else if (action == ITEMS_PREVIOUS || action == ITEMS_NEXT) {
             int next = offset + (action == ITEMS_PREVIOUS ? -CELLS : CELLS);
             if (next < 0 || next >= ritual.items()
@@ -123,6 +130,26 @@ public final class FilterBookSync extends SyncHandler<FilterBookSync> {
         dirty = false;
         view = snapshot();
         syncToClient(0, this::writeView);
+        if (init) syncToClient(1, buffer -> FilterBookSearch.writeDirectory(buffer, directory()));
+    }
+
+    private List<FilterBookSearch.Entry> directory() {
+        List<FilterBookSearch.Entry> entries = new ArrayList<>();
+        if (!valid()) return entries;
+        for (FilterCatalogueView.Ritual ritual : catalogue.rituals()) {
+            String signature = ritual.definition()
+                .focus();
+            entries.add(
+                new FilterBookSearch.Entry(
+                    ritual.definition()
+                        .id(),
+                    signature,
+                    focus(signature),
+                    ritual.entry()
+                        .recipe()
+                        .radius()));
+        }
+        return entries;
     }
 
     private View snapshot() {
@@ -205,6 +232,10 @@ public final class FilterBookSync extends SyncHandler<FilterBookSync> {
 
     @Override
     public void readOnClient(int id, PacketBuffer buffer) throws IOException {
+        if (id == 1) {
+            search.directory(FilterBookSearch.readDirectory(buffer));
+            return;
+        }
         if (id != 0) return;
         View next = new View();
         next.token = buffer.readLong();
@@ -224,6 +255,11 @@ public final class FilterBookSync extends SyncHandler<FilterBookSync> {
             next.kept.add(buffer.readBoolean());
         }
         view = next;
+        if (next.status == 2) search.directory(List.of());
+    }
+
+    public FilterBookSearch search() {
+        return search;
     }
 
     public ItemStack item(int cell) {

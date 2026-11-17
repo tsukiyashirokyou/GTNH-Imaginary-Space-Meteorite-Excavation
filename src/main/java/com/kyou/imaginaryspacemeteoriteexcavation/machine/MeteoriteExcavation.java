@@ -393,22 +393,26 @@ public final class MeteoriteExcavation extends MTEExtendedPowerMultiBlockBase<Me
     private void verifyLocalInputs() {
         Set<MTEHatch> unique = Collections.newSetFromMap(new IdentityHashMap<>());
         for (MTEHatchInputBus bus : mInputBusses) {
-            if (!LocalStartResources.supportsItemBus(bus))
-                throw new UnsupportedOperationException("Unsupported item input bus: " + bus.getClass()
+            if (!LocalStartResources.supportsItemBus(bus)) throw new UnsupportedOperationException(
+                "Unsupported item input bus: " + bus.getClass()
                     .getName());
-            if (!bus.isValid()) throw new UnsupportedOperationException("Invalid item input bus: " + bus.getClass()
-                .getName());
-            if (!unique.add(bus)) throw new UnsupportedOperationException("Duplicate item input bus: " + bus.getClass()
-                .getName());
+            if (!bus.isValid()) throw new UnsupportedOperationException(
+                "Invalid item input bus: " + bus.getClass()
+                    .getName());
+            if (!unique.add(bus)) throw new UnsupportedOperationException(
+                "Duplicate item input bus: " + bus.getClass()
+                    .getName());
         }
         for (MTEHatchInput hatch : mInputHatches) {
-            if (!LocalStartResources.supportsFluidHatch(hatch))
-                throw new UnsupportedOperationException("Unsupported fluid input hatch: " + hatch.getClass()
+            if (!LocalStartResources.supportsFluidHatch(hatch)) throw new UnsupportedOperationException(
+                "Unsupported fluid input hatch: " + hatch.getClass()
                     .getName());
-            if (!hatch.isValid()) throw new UnsupportedOperationException("Invalid fluid input hatch: " + hatch.getClass()
-                .getName());
-            if (!unique.add(hatch)) throw new UnsupportedOperationException("Duplicate fluid input hatch: " + hatch.getClass()
-                .getName());
+            if (!hatch.isValid()) throw new UnsupportedOperationException(
+                "Invalid fluid input hatch: " + hatch.getClass()
+                    .getName());
+            if (!unique.add(hatch)) throw new UnsupportedOperationException(
+                "Duplicate fluid input hatch: " + hatch.getClass()
+                    .getName());
         }
         for (MTEHatch hatch : mEnergyHatches) {
             if (!unique.add(hatch)) throw new UnsupportedOperationException("Duplicate energy input");
